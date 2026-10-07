@@ -10,6 +10,9 @@ export default function AdminProductList() {
   const [soloStockBajo, setSoloStockBajo] = useState(false);
   const [editando, setEditando] = useState(null);
   const [imprimiendoProd, setImprimiendoProd] = useState(null);
+  
+  // Estado para la ventana flotante de imagen ampliada
+  const [imagenSeleccionada, setImagenSeleccionada] = useState(null);
 
   const [formEdit, setFormEdit] = useState({
     codigo_modelo: '',
@@ -170,9 +173,15 @@ export default function AdminProductList() {
             >
               <div className="flex items-center gap-3">
                 {prod.imagen_url ? (
-                  <img src={prod.imagen_url} alt={prod.nombre} className="w-12 h-12 object-cover rounded-lg" />
+                  <img
+                    src={prod.imagen_url}
+                    alt={prod.nombre}
+                    onClick={() => setImagenSeleccionada(prod.imagen_url)}
+                    className="w-12 h-12 object-cover rounded-lg shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                    title="Hacé clic para ampliar"
+                  />
                 ) : (
-                  <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center text-slate-500">
+                  <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center text-slate-500 shrink-0">
                     <Barcode className="w-6 h-6" />
                   </div>
                 )}
@@ -366,6 +375,34 @@ export default function AdminProductList() {
               </button>
             </div>
             <Scanner onScan={handleScanCamara} />
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Vista Previa de Imagen Ampliada */}
+      {imagenSeleccionada && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+          onClick={() => setImagenSeleccionada(null)}
+        >
+          <div
+            className="relative bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-md sm:max-w-lg w-full shadow-2xl flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setImagenSeleccionada(null)}
+              className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full w-9 h-9 flex items-center justify-center font-bold shadow-lg hover:bg-red-600 transition-colors text-base"
+            >
+              ✕
+            </button>
+
+            <h3 className="text-slate-300 font-semibold mb-3 text-base">Vista de Imagen</h3>
+
+            <img
+              src={imagenSeleccionada}
+              alt="Producto ampliado"
+              className="w-full h-auto max-h-[80vh] object-contain rounded-lg border border-slate-800"
+            />
           </div>
         </div>
       )}
