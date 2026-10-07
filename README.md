@@ -1,16 +1,15 @@
-# React + Vite
+# Eclipse Stock 2.0 🚀
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Sistema de gestión de inventario y stock optimizado para control de ventas, importación de planillas Excel y soporte PWA para instalación mobile.
 
-Currently, two official plugins are available:
+## Funcionalidades Principales
+- 📦 **Control de Stock Acumulativo:** Importación de planillas `.xlsx` sumando unidades al stock actual y registrando productos nuevos.
+- 📸 **Extracción de Imágenes:** Asignación automática de fotos desde archivos Excel.
+- ⚡ **Venta por Lote:** Selección rápida y descuento masivo de unidades.
+- 📱 **Soporte PWA:** Instalación directa en dispositivos Android e iOS con ícono propio en pantalla de inicio.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Tecnologías Utilizadas
+- **React** + **Vite**
+- **Tailwind CSS**
+- **Supabase** (Base de datos)
+- **Vite PWA Plugin**
