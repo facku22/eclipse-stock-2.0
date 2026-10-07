@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import Scanner from './Scanner';
-import { Barcode, Search, MinusCircle, PackageCheck, AlertTriangle, Zap, CheckCircle2, Camera, X } from 'lucide-react';
+import { Barcode, Search, MinusCircle, PackageCheck, AlertTriangle, Zap, CheckCircle2, Camera, X, Check } from 'lucide-react';
 
 export default function ProductList() {
   const [productos, setProductos] = useState([]);
@@ -10,6 +10,10 @@ export default function ProductList() {
   const [notificacion, setNotificacion] = useState(null);
   const [modoVentaRapida, setModoVentaRapida] = useState(true);
   const [mostrarCamaraModal, setMostrarCamaraModal] = useState(false);
+  const [imagenSeleccionada, setImagenSeleccionada] = useState(null);
+  
+  // Nuevo estado para el modal de confirmación de escaneo
+  const [productoEscaneado, setProductoEscaneado] = useState(null);
 
   const buscadorRef = useRef(null);
 
@@ -61,6 +65,7 @@ export default function ProductList() {
     mostrarMensaje(`Se descontó ${cantidadADescontar} unid. de "${prod.nombre}"`);
   };
 
+  // Manejador del escaneo: Ahora abre el modal en lugar de descontar
   const handleEscaneoDirecto = (codigo) => {
     const coincidencia = productos.find(
       (p) =>
@@ -69,7 +74,7 @@ export default function ProductList() {
     );
 
     if (coincidencia) {
-      descontarStock(coincidencia, 1);
+      setProductoEscaneado(coincidencia);
       setBusqueda('');
     } else {
       mostrarMensaje(`Código no encontrado: ${codigo}`, 'error');
@@ -137,10 +142,10 @@ export default function ProductList() {
                 ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-300'
                 : 'bg-slate-800 border-slate-700 text-slate-400'
             }`}
-            title="Al escanear un código se resta 1 unidad automáticamente"
+            title="Abre ventana de confirmación al escanear"
           >
             <Zap className={`w-4 h-4 ${modoVentaRapida ? 'text-amber-400 fill-amber-400' : ''}`} />
-            Venta Rápida: {modoVentaRapida ? 'ON' : 'OFF'}
+            Escaneo Directo: {modoVentaRapida ? 'ON' : 'OFF'}
           </button>
 
           <button
@@ -168,7 +173,13 @@ export default function ProductList() {
             >
               <div className="flex items-center gap-3">
                 {prod.imagen_url ? (
-                  <img src={prod.imagen_url} alt={prod.nombre} className="w-12 h-12 object-cover rounded-lg shrink-0" />
+                  <img
+                    src={prod.imagen_url}
+                    alt={prod.nombre}
+                    onClick={() => setImagenSeleccionada(prod.imagen_url)}
+                    className="w-12 h-12 object-cover rounded-lg shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                    title="Hacé clic para ampliar"
+                  />
                 ) : (
                   <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center text-slate-500 shrink-0">
                     <Barcode className="w-6 h-6" />
@@ -243,6 +254,101 @@ export default function ProductList() {
                 handleEscaneoDirecto(codigo);
                 setMostrarCamaraModal(false);
               }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación de Escaneo */}
+      {productoEscaneado && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+          onClick={() => setProductoEscaneado(null)}
+        >
+          <div
+            className="relative bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-sm w-full shadow-2xl flex flex-col items-center space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setProductoEscaneado(null)}
+              className="absolute top-3 right-3 text-slate-400 hover:text-slate-200"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-slate-200 font-bold text-base text-center">Producto Escaneado</h3>
+
+            {/* Imagen del producto */}
+            {productoEscaneado.imagen_url ? (
+              <img
+                src={productoEscaneado.imagen_url}
+                alt={productoEscaneado.nombre}
+                className="w-24 h-24 object-cover rounded-xl border border-slate-700"
+              />
+            ) : (
+              <div className="w-24 h-24 bg-slate-800 rounded-xl flex items-center justify-center text-slate-500 border border-slate-700">
+                <Barcode className="w-10 h-10" />
+              </div>
+            )}
+
+            {/* Detalle y Stock */}
+            <div className="text-center space-y-1 w-full">
+              <h4 className="text-lg font-bold text-slate-100">{productoEscaneado.nombre}</h4>
+              <p className="text-xs text-slate-400">
+                Modelo: <span className="font-mono text-slate-200">{productoEscaneado.codigo_modelo || 'Sin modelo'}</span>
+              </p>
+              <div className="mt-2 py-2 px-4 bg-slate-800 rounded-xl border border-slate-700 flex justify-between items-center">
+                <span className="text-xs text-slate-400">Stock Actual:</span>
+                <span className="text-base font-bold text-emerald-400">{productoEscaneado.stock} unid.</span>
+              </div>
+            </div>
+
+            {/* Botones de Acción */}
+            <div className="flex gap-2 w-full pt-2">
+              <button
+                onClick={() => setProductoEscaneado(null)}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={() => {
+                  descontarStock(productoEscaneado, 1);
+                  setProductoEscaneado(null);
+                }}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950 transition"
+              >
+                <Check className="w-4 h-4" /> Descontar 1
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Vista Previa de Imagen Ampliada */}
+      {imagenSeleccionada && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+          onClick={() => setImagenSeleccionada(null)}
+        >
+          <div
+            className="relative bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-md sm:max-w-lg w-full shadow-2xl flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setImagenSeleccionada(null)}
+              className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full w-9 h-9 flex items-center justify-center font-bold shadow-lg hover:bg-red-600 transition-colors text-base"
+            >
+              ✕
+            </button>
+
+            <h3 className="text-slate-300 font-semibold mb-3 text-base">Vista de Imagen</h3>
+
+            <img
+              src={imagenSeleccionada}
+              alt="Producto ampliado"
+              className="w-full h-auto max-h-[80vh] object-contain rounded-lg border border-slate-800"
             />
           </div>
         </div>
