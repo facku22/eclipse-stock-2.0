@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { Barcode, Search, MinusCircle, PackageCheck } from 'lucide-react';
+import { Barcode, Search, MinusCircle, PackageCheck, AlertTriangle } from 'lucide-react';
 
 export default function ProductList() {
   const [productos, setProductos] = useState([]);
@@ -19,21 +19,35 @@ export default function ProductList() {
     setLoading(false);
   };
 
-  const descontarStock = async (id, stockActual, cantidadADescontar) => {
-    const nuevoStock = Math.max(0, stockActual - cantidadADescontar);
+  const descontarStock = async (prod, cantidadADescontar) => {
+    const nuevoStock = Math.max(0, prod.stock - cantidadADescontar);
     
-    // Actualización optimista en la pantalla
-    setProductos(prev => prev.map(p => p.id === id ? { ...p, stock: nuevoStock } : p));
+    // Actualización optimista en pantalla
+    setProductos(prev => prev.map(p => p.id === prod.id ? { ...p, stock: nuevoStock } : p));
 
-    const { error } = await supabase
+    // 1. Actualizar stock en la tabla productos
+    const { error: errProd } = await supabase
       .from('productos')
       .update({ stock: nuevoStock })
-      .eq('id', id);
+      .eq('id', prod.id);
 
-    if (error) {
+    if (errProd) {
       alert('Error al actualizar el stock');
       cargarProductos();
+      return;
     }
+
+    // 2. Registrar en el Historial de Movimientos
+    await supabase.from('historial_movimientos').insert([
+      {
+        producto_id: prod.id,
+        nombre_producto: prod.nombre,
+        codigo_modelo: prod.codigo_modelo || prod.codigo_articulo || '',
+        codigo_barras: prod.codigo_barras || '',
+        cantidad: cantidadADescontar,
+        tipo: 'venta'
+      }
+    ]);
   };
 
   const handleLoteChange = (id, valor) => {
@@ -42,29 +56,36 @@ export default function ProductList() {
 
   const productosFiltrados = productos.filter((p) =>
     (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+    (p.codigo_modelo || '').toLowerCase().includes(busqueda.toLowerCase()) ||
     (p.codigo_barras || '').toLowerCase().includes(busqueda.toLowerCase())
   );
 
   return (
     <div className="space-y-4">
+      {/* Buscador */}
       <div className="relative">
         <Search className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
         <input
           type="text"
-          placeholder="Buscar producto..."
+          placeholder="Buscar por nombre, modelo o código..."
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:border-indigo-500"
         />
       </div>
 
+      {/* Lista de Productos */}
       <div className="grid gap-3">
         {productosFiltrados.map((prod) => {
           const cantidadLote = cantidadesLote[prod.id] || '';
+          const esStockBajo = prod.stock <= 5;
+
           return (
             <div
               key={prod.id}
-              className="p-4 bg-slate-900 border border-slate-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              className={`p-4 bg-slate-900 border rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                esStockBajo ? 'border-amber-500/40 bg-amber-500/5' : 'border-slate-800'
+              }`}
             >
               <div className="flex items-center gap-3">
                 {prod.imagen_url ? (
@@ -75,17 +96,27 @@ export default function ProductList() {
                   </div>
                 )}
                 <div>
-                  <h4 className="font-semibold text-slate-100">{prod.nombre}</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-slate-100">{prod.nombre}</h4>
+                    {esStockBajo && (
+                      <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-[10px] font-bold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> Stock Bajo
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-400">
-                    Cód: <span className="font-mono text-indigo-400">{prod.codigo_barras || 'Sin código'}</span> | Stock: <span className="text-emerald-400 font-bold">{prod.stock}</span>
+                    Mod: <span className="font-mono text-slate-300">{prod.codigo_modelo || 'Sin modelo'}</span> | Stock:{' '}
+                    <span className={`font-bold ${esStockBajo ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {prod.stock}
+                    </span>
                   </p>
                 </div>
               </div>
 
-              {/* Botones de acción rápida para empleados */}
+              {/* Botones de acción */}
               <div className="flex items-center gap-2 self-end sm:self-auto">
                 <button
-                  onClick={() => descontarStock(prod.id, prod.stock, 1)}
+                  onClick={() => descontarStock(prod, 1)}
                   className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg hover:bg-red-500/20 text-xs font-medium flex items-center gap-1"
                 >
                   <MinusCircle className="w-4 h-4" /> -1 Unid.
@@ -103,7 +134,7 @@ export default function ProductList() {
                     onClick={() => {
                       const num = parseInt(cantidadLote, 10);
                       if (num > 0) {
-                        descontarStock(prod.id, prod.stock, num);
+                        descontarStock(prod, num);
                         handleLoteChange(prod.id, '');
                       }
                     }}

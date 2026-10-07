@@ -2,23 +2,22 @@ import React, { useState, useEffect } from 'react';
 import ProductList from './components/ProductList';
 import AdminProductList from './components/AdminProductList';
 import ImportSheets from './components/ImportSheets';
+import HistoryList from './components/HistoryList';
 import Scanner from './components/Scanner';
 import InstallPrompt from './components/InstallPrompt';
-import { LayoutGrid, ShieldCheck, Barcode, Camera, X, Lock, LogOut, KeyRound, UserCheck } from 'lucide-react';
+import { LayoutGrid, ShieldCheck, Barcode, Camera, X, Lock, LogOut, KeyRound, UserCheck, History } from 'lucide-react';
 
-// DEFINIR CONTRASEÑAS (Podés cambiarlas por las que prefieras)
 const CLAVE_EMPLEADO = '2580';
 const CLAVE_ADMIN = 'admin2580';
 
 export default function App() {
-  const [usuario, setUsuario] = useState(null); // null | 'empleado' | 'admin'
+  const [usuario, setUsuario] = useState(null);
   const [claveInput, setClaveInput] = useState('');
   const [errorLogin, setErrorLogin] = useState('');
 
-  const [tabActiva, setTabActiva] = useState('empleados'); // 'empleados' | 'admin'
+  const [tabActiva, setTabActiva] = useState('empleados'); // 'empleados' | 'admin' | 'historial'
   const [mostrarEscanerGeneral, setMostrarEscanerGeneral] = useState(false);
 
-  // Mantener la sesión iniciada localmente
   useEffect(() => {
     const sesionGuardada = localStorage.getItem('eclipse_stock_sesion');
     if (sesionGuardada) {
@@ -52,8 +51,6 @@ export default function App() {
     localStorage.removeItem('eclipse_stock_sesion');
   };
 
-  // --- PANTALLA DE LOGIN ---
-  // --- PANTALLA DE LOGIN ---
   if (!usuario) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
@@ -99,12 +96,11 @@ export default function App() {
     );
   }
 
-  // --- APP PRINCIPAL UNA VEZ LOGUEADO ---
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased">
       <InstallPrompt />
 
-      {/* Encabezado Superior */}
+      {/* Encabezado */}
       <header className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-4 py-3">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -140,7 +136,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Navegación por Solapas */}
+      {/* Navegación Tabs */}
       <nav className="bg-slate-900/40 border-b border-slate-800/80 px-4">
         <div className="max-w-4xl mx-auto flex gap-2 pt-3">
           <button
@@ -155,58 +151,73 @@ export default function App() {
             Ventas / Stock
           </button>
 
-          {/* Solapa solo accesible/visible para el rol de Admin */}
           {usuario === 'admin' && (
-            <button
-              onClick={() => setTabActiva('admin')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-semibold border-b-2 transition ${
-                tabActiva === 'admin'
-                  ? 'border-indigo-500 text-indigo-400 bg-slate-900/80'
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4" />
-              Administración
-            </button>
+            <>
+              <button
+                onClick={() => setTabActiva('admin')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-semibold border-b-2 transition ${
+                  tabActiva === 'admin'
+                    ? 'border-indigo-500 text-indigo-400 bg-slate-900/80'
+                    : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Administración
+              </button>
+
+              <button
+                onClick={() => setTabActiva('historial')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-semibold border-b-2 transition ${
+                  tabActiva === 'historial'
+                    ? 'border-indigo-500 text-indigo-400 bg-slate-900/80'
+                    : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
+                }`}
+              >
+                <History className="w-4 h-4" />
+                Historial
+              </button>
+            </>
           )}
         </div>
       </nav>
 
-      {/* Contenido Principal */}
+      {/* Contenido */}
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 space-y-6">
-        {tabActiva === 'empleados' && (
-          <div className="space-y-4">
-            <ProductList />
-          </div>
-        )}
+        {tabActiva === 'empleados' && <ProductList />}
 
         {tabActiva === 'admin' && usuario === 'admin' && (
           <div className="space-y-6">
             <ImportSheets />
-
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
               <div className="border-b border-slate-800 pb-3">
                 <h2 className="text-base font-bold text-slate-100">Gestión de Productos</h2>
                 <p className="text-xs text-slate-400">
-                  Editá datos, asigná códigos con la pistola lectora/cámara o modificá precios y stock.
+                  Editá datos, asigná códigos con la pistola/cámara, generá etiquetas o filtrá stock bajo.
                 </p>
               </div>
               <AdminProductList />
             </div>
           </div>
         )}
+
+        {tabActiva === 'historial' && usuario === 'admin' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+            <div className="border-b border-slate-800 pb-3">
+              <h2 className="text-base font-bold text-slate-100">Historial de Ventas y Movimientos</h2>
+              <p className="text-xs text-slate-400">Registro en tiempo real de cada descuento de stock.</p>
+            </div>
+            <HistoryList />
+          </div>
+        )}
       </main>
 
-      {/* Modal de Escáner por Cámara */}
+      {/* Modal Cámara */}
       {mostrarEscanerGeneral && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-4 space-y-3">
             <div className="flex justify-between items-center">
               <h4 className="text-sm font-bold text-slate-100">Buscar por Cámara</h4>
-              <button
-                onClick={() => setMostrarEscanerGeneral(false)}
-                className="text-slate-400 hover:text-slate-200"
-              >
+              <button onClick={() => setMostrarEscanerGeneral(false)} className="text-slate-400 hover:text-slate-200">
                 <X className="w-5 h-5" />
               </button>
             </div>

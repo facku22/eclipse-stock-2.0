@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import Scanner from './Scanner';
-import { Edit2, Barcode, Camera, Check, X, Search, Tag, Trash2 } from 'lucide-react';
+import BarcodeSVG from 'react-barcode';
+import { Edit2, Barcode, Camera, Check, X, Search, Tag, Trash2, Printer, AlertTriangle, Filter } from 'lucide-react';
 
 export default function AdminProductList() {
   const [productos, setProductos] = useState([]);
   const [busqueda, setBusqueda] = useState('');
+  const [soloStockBajo, setSoloStockBajo] = useState(false);
   const [editando, setEditando] = useState(null);
+  const [imprimiendoProd, setImprimiendoProd] = useState(null);
   
   const [formEdit, setFormEdit] = useState({
     codigo_modelo: '',
@@ -23,7 +26,6 @@ export default function AdminProductList() {
     cargarProductos();
   }, []);
 
-  // Foco automático en el campo de Código de Barras para la pistola lectora
   useEffect(() => {
     if (editando && inputCodigoBarrasRef.current) {
       inputCodigoBarrasRef.current.focus();
@@ -55,7 +57,7 @@ export default function AdminProductList() {
         .from('productos')
         .update({
           codigo_modelo: formEdit.codigo_modelo,
-          codigo_barras: formEdit.codigo_barras || null, // Guarda null si está vacío para evitar conflictos
+          codigo_barras: formEdit.codigo_barras || null,
           nombre: formEdit.nombre,
           stock: Number(formEdit.stock),
           precio: Number(formEdit.precio),
@@ -73,13 +75,8 @@ export default function AdminProductList() {
 
   const eliminarProducto = async (id) => {
     if (!confirm('¿Estás seguro de que querés eliminar este producto?')) return;
-
     const { error } = await supabase.from('productos').delete().eq('id', id);
-    if (!error) {
-      cargarProductos();
-    } else {
-      alert('Error al eliminar: ' + error.message);
-    }
+    if (!error) cargarProductos();
   };
 
   const handleScanCamara = (codigoEscaneado) => {
@@ -87,74 +84,115 @@ export default function AdminProductList() {
     setMostrarCamaraModal(false);
   };
 
-  const productosFiltrados = productos.filter((p) =>
-    (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-    (p.codigo_modelo || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-    (p.codigo_barras || '').toLowerCase().includes(busqueda.toLowerCase())
-  );
+  const productosFiltrados = productos.filter((p) => {
+    const coincideTexto =
+      (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+      (p.codigo_modelo || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+      (p.codigo_barras || '').toLowerCase().includes(busqueda.toLowerCase());
+    
+    if (soloStockBajo) return coincideTexto && p.stock <= 5;
+    return coincideTexto;
+  });
+
+  const imprimirEtiqueta = () => {
+    window.print();
+  };
 
   return (
     <div className="space-y-4">
-      {/* Buscador de productos */}
-      <div className="relative">
-        <Search className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Buscar por nombre, modelo o código de barras..."
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:border-indigo-500"
-        />
+      {/* Barra de Búsqueda y Filtro de Stock Bajo */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Buscar por nombre, modelo o código..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:border-indigo-500"
+          />
+        </div>
+
+        <button
+          onClick={() => setSoloStockBajo(!soloStockBajo)}
+          className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-semibold transition ${
+            soloStockBajo
+              ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
+              : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Filter className="w-4 h-4" />
+          Solo Stock Bajo (≤ 5)
+        </button>
       </div>
 
       {/* Lista de productos */}
       <div className="grid gap-3">
-        {productosFiltrados.map((prod) => (
-          <div
-            key={prod.id}
-            className="p-4 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between"
-          >
-            <div className="flex items-center gap-3">
-              {prod.imagen_url ? (
-                <img src={prod.imagen_url} alt={prod.nombre} className="w-12 h-12 object-cover rounded-lg" />
-              ) : (
-                <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center text-slate-500">
-                  <Barcode className="w-6 h-6" />
-                </div>
-              )}
-              <div>
-                <h4 className="font-semibold text-slate-100">{prod.nombre}</h4>
-                <div className="flex flex-wrap gap-x-3 text-xs text-slate-400 mt-0.5">
-                  <span>
-                    Modelo: <span className="font-mono text-slate-200">{prod.codigo_modelo || 'Sin modelo'}</span>
-                  </span>
-                  <span>|</span>
-                  <span>
-                    Barras: <span className="font-mono text-indigo-400">{prod.codigo_barras || 'Sin registrar'}</span>
-                  </span>
-                  <span>|</span>
-                  <span>Stock: <strong className="text-emerald-400">{prod.stock}</strong></span>
+        {productosFiltrados.map((prod) => {
+          const esStockBajo = prod.stock <= 5;
+          const codigoParaImprimir = prod.codigo_barras || prod.codigo_modelo || prod.codigo_articulo;
+
+          return (
+            <div
+              key={prod.id}
+              className={`p-4 bg-slate-900 border rounded-xl flex items-center justify-between ${
+                esStockBajo ? 'border-amber-500/40 bg-amber-500/5' : 'border-slate-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                {prod.imagen_url ? (
+                  <img src={prod.imagen_url} alt={prod.nombre} className="w-12 h-12 object-cover rounded-lg" />
+                ) : (
+                  <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center text-slate-500">
+                    <Barcode className="w-6 h-6" />
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-slate-100">{prod.nombre}</h4>
+                    {esStockBajo && (
+                      <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-[10px] font-bold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> Reponer
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 text-xs text-slate-400 mt-0.5">
+                    <span>Modelo: <span className="font-mono text-slate-200">{prod.codigo_modelo || 'Sin modelo'}</span></span>
+                    <span>|</span>
+                    <span>Barras: <span className="font-mono text-indigo-400">{prod.codigo_barras || 'Sin registrar'}</span></span>
+                    <span>|</span>
+                    <span>Stock: <strong className={esStockBajo ? 'text-amber-400' : 'text-emerald-400'}>{prod.stock}</strong></span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => iniciarEdicion(prod)}
-                className="px-3 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/20 flex items-center gap-1.5 text-xs font-medium"
-              >
-                <Edit2 className="w-4 h-4" /> Editar
-              </button>
-              <button
-                onClick={() => eliminarProducto(prod.id)}
-                className="p-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20"
-                title="Eliminar producto"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                {codigoParaImprimir && (
+                  <button
+                    onClick={() => setImprimiendoProd(prod)}
+                    className="p-2 bg-slate-800 text-slate-300 border border-slate-700 rounded-lg hover:text-indigo-400 transition"
+                    title="Imprimir Etiqueta"
+                  >
+                    <Printer className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={() => iniciarEdicion(prod)}
+                  className="px-3 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/20 flex items-center gap-1 text-xs font-medium"
+                >
+                  <Edit2 className="w-3.5 h-3.5" /> Editar
+                </button>
+                <button
+                  onClick={() => eliminarProducto(prod.id)}
+                  className="p-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition"
+                  title="Eliminar"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Modal de Edición */}
@@ -169,7 +207,6 @@ export default function AdminProductList() {
             </div>
 
             <form onSubmit={guardarCambios} className="space-y-4">
-              {/* Código de Modelo */}
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
                   <Tag className="w-3.5 h-3.5 text-slate-400" /> Código de Modelo / Artículo
@@ -178,15 +215,13 @@ export default function AdminProductList() {
                   type="text"
                   value={formEdit.codigo_modelo}
                   onChange={(e) => setFormEdit({ ...formEdit, codigo_modelo: e.target.value })}
-                  placeholder="Ej: MOD-1052"
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 font-mono focus:border-indigo-500 focus:outline-none"
                 />
               </div>
 
-              {/* Código de Barras para lectora / cámara */}
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
-                  <Barcode className="w-3.5 h-3.5 text-indigo-400" /> Código de Barras (Pistola lectora o Cámara)
+                  <Barcode className="w-3.5 h-3.5 text-indigo-400" /> Código de Barras (Pistola/Cámara)
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -194,23 +229,20 @@ export default function AdminProductList() {
                     type="text"
                     value={formEdit.codigo_barras}
                     onChange={(e) => setFormEdit({ ...formEdit, codigo_barras: e.target.value })}
-                    placeholder="Escaneá el código de la etiqueta aquí..."
                     className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 font-mono focus:border-indigo-500 focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => setMostrarCamaraModal(true)}
-                    className="p-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-xl hover:text-indigo-400 transition"
-                    title="Escanear con cámara"
+                    className="p-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-xl hover:text-indigo-400"
                   >
                     <Camera className="w-5 h-5" />
                   </button>
                 </div>
               </div>
 
-              {/* Nombre */}
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Nombre del Producto</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Nombre</label>
                 <input
                   type="text"
                   value={formEdit.nombre}
@@ -219,7 +251,6 @@ export default function AdminProductList() {
                 />
               </div>
 
-              {/* Stock y Precio */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">Stock</label>
@@ -241,19 +272,11 @@ export default function AdminProductList() {
                 </div>
               </div>
 
-              {/* Botones */}
               <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setEditando(null)}
-                  className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200"
-                >
+                <button type="button" onClick={() => setEditando(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200">
                   Cancelar
                 </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium text-sm flex items-center gap-2"
-                >
+                <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium text-sm flex items-center gap-2">
                   <Check className="w-4 h-4" /> Guardar
                 </button>
               </div>
@@ -262,7 +285,43 @@ export default function AdminProductList() {
         </div>
       )}
 
-      {/* Modal de Cámara */}
+      {/* Modal e Impresión de Etiquetas */}
+      {imprimiendoProd && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-6 text-center space-y-4">
+            <h3 className="text-base font-bold text-slate-100">Vista Previa de Etiqueta</h3>
+
+            {/* Contenedor imprimible */}
+            <div className="bg-white p-4 rounded-xl text-black flex flex-col items-center justify-center space-y-1 print:m-0 print:p-0">
+              <span className="font-bold text-sm tracking-tight">{imprimiendoProd.nombre}</span>
+              <span className="text-xs text-gray-600 font-mono">Mod: {imprimiendoProd.codigo_modelo || '-'}</span>
+              <BarcodeSVG
+                value={imprimiendoProd.codigo_barras || imprimiendoProd.codigo_modelo || '00000'}
+                width={1.5}
+                height={50}
+                fontSize={12}
+              />
+            </div>
+
+            <div className="flex justify-center gap-2 pt-2">
+              <button
+                onClick={() => setImprimiendoProd(null)}
+                className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-sm hover:bg-slate-700"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={imprimirEtiqueta}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold flex items-center gap-2"
+              >
+                <Printer className="w-4 h-4" /> Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Cámara */}
       {mostrarCamaraModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-4 space-y-3">
