@@ -1,31 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
-import { Barcode, Search, MinusCircle, PackageCheck, AlertTriangle } from 'lucide-react';
+import Scanner from './Scanner';
+import { Barcode, Search, MinusCircle, PackageCheck, AlertTriangle, Zap, CheckCircle2, Camera, X } from 'lucide-react';
 
 export default function ProductList() {
   const [productos, setProductos] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [cantidadesLote, setCantidadesLote] = useState({});
+  const [notificacion, setNotificacion] = useState(null);
+  const [modoVentaRapida, setModoVentaRapida] = useState(true);
+  const [mostrarCamaraModal, setMostrarCamaraModal] = useState(false);
+
+  const buscadorRef = useRef(null);
 
   useEffect(() => {
     cargarProductos();
   }, []);
 
+  useEffect(() => {
+    if (buscadorRef.current) buscadorRef.current.focus();
+  }, []);
+
   const cargarProductos = async () => {
-    setLoading(true);
     const { data, error } = await supabase.from('productos').select('*').order('nombre');
     if (!error) setProductos(data || []);
-    setLoading(false);
+  };
+
+  const mostrarMensaje = (texto, tipo = 'exito') => {
+    setNotificacion({ texto, tipo });
+    setTimeout(() => setNotificacion(null), 3000);
   };
 
   const descontarStock = async (prod, cantidadADescontar) => {
     const nuevoStock = Math.max(0, prod.stock - cantidadADescontar);
-    
-    // Actualización optimista en pantalla
-    setProductos(prev => prev.map(p => p.id === prod.id ? { ...p, stock: nuevoStock } : p));
 
-    // 1. Actualizar stock en la tabla productos
+    setProductos((prev) => prev.map((p) => (p.id === prod.id ? { ...p, stock: nuevoStock } : p)));
+
     const { error: errProd } = await supabase
       .from('productos')
       .update({ stock: nuevoStock })
@@ -37,7 +47,6 @@ export default function ProductList() {
       return;
     }
 
-    // 2. Registrar en el Historial de Movimientos
     await supabase.from('historial_movimientos').insert([
       {
         producto_id: prod.id,
@@ -45,33 +54,103 @@ export default function ProductList() {
         codigo_modelo: prod.codigo_modelo || prod.codigo_articulo || '',
         codigo_barras: prod.codigo_barras || '',
         cantidad: cantidadADescontar,
-        tipo: 'venta'
-      }
+        tipo: 'venta',
+      },
     ]);
+
+    mostrarMensaje(`Se descontó ${cantidadADescontar} unid. de "${prod.nombre}"`);
+  };
+
+  const handleEscaneoDirecto = (codigo) => {
+    const coincidencia = productos.find(
+      (p) =>
+        (p.codigo_barras && p.codigo_barras.trim() === codigo.trim()) ||
+        (p.codigo_modelo && p.codigo_modelo.trim().toLowerCase() === codigo.trim().toLowerCase())
+    );
+
+    if (coincidencia) {
+      descontarStock(coincidencia, 1);
+      setBusqueda('');
+    } else {
+      mostrarMensaje(`Código no encontrado: ${codigo}`, 'error');
+    }
+  };
+
+  const handleKeyDownBuscador = (e) => {
+    if (e.key === 'Enter' && modoVentaRapida && busqueda.trim() !== '') {
+      e.preventDefault();
+      handleEscaneoDirecto(busqueda.trim());
+    }
   };
 
   const handleLoteChange = (id, valor) => {
-    setCantidadesLote(prev => ({ ...prev, [id]: valor }));
+    setCantidadesLote((prev) => ({ ...prev, [id]: valor }));
   };
 
-  const productosFiltrados = productos.filter((p) =>
-    (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-    (p.codigo_modelo || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-    (p.codigo_barras || '').toLowerCase().includes(busqueda.toLowerCase())
+  const productosFiltrados = productos.filter(
+    (p) =>
+      (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+      (p.codigo_modelo || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+      (p.codigo_barras || '').toLowerCase().includes(busqueda.toLowerCase())
   );
 
   return (
     <div className="space-y-4">
-      {/* Buscador */}
-      <div className="relative">
-        <Search className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Buscar por nombre, modelo o código..."
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:border-indigo-500"
-        />
+      {/* Toast Notificación Flotante */}
+      {notificacion && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-2xl border flex items-center gap-3 backdrop-blur-md animate-bounce ${
+            notificacion.tipo === 'exito'
+              ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
+              : 'bg-red-950/90 border-red-500/40 text-red-200'
+          }`}
+        >
+          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+          <span className="text-sm font-semibold">{notificacion.texto}</span>
+        </div>
+      )}
+
+      {/* Barra superior de opciones y lectora */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
+          <input
+            ref={buscadorRef}
+            type="text"
+            placeholder={
+              modoVentaRapida
+                ? 'Escaneá con la pistola lectora o buscá...'
+                : 'Buscar por nombre, modelo o código...'
+            }
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            onKeyDown={handleKeyDownBuscador}
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:border-indigo-500"
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => setModoVentaRapida(!modoVentaRapida)}
+            className={`flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+              modoVentaRapida
+                ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-300'
+                : 'bg-slate-800 border-slate-700 text-slate-400'
+            }`}
+            title="Al escanear un código se resta 1 unidad automáticamente"
+          >
+            <Zap className={`w-4 h-4 ${modoVentaRapida ? 'text-amber-400 fill-amber-400' : ''}`} />
+            Venta Rápida: {modoVentaRapida ? 'ON' : 'OFF'}
+          </button>
+
+          <button
+            onClick={() => setMostrarCamaraModal(true)}
+            className="p-2.5 bg-slate-800 border border-slate-700 text-slate-300 rounded-xl hover:text-indigo-400"
+            title="Escanear con Cámara"
+          >
+            <Camera className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Lista de Productos */}
@@ -83,7 +162,7 @@ export default function ProductList() {
           return (
             <div
               key={prod.id}
-              className={`p-4 bg-slate-900 border rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+              className={`p-4 bg-slate-900 border rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
                 esStockBajo ? 'border-amber-500/40 bg-amber-500/5' : 'border-slate-800'
               }`}
             >
@@ -104,7 +183,7 @@ export default function ProductList() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-400 mt-0.5">
                     Mod: <span className="font-mono text-slate-300">{prod.codigo_modelo || 'Sin modelo'}</span> | Stock:{' '}
                     <span className={`font-bold ${esStockBajo ? 'text-amber-400' : 'text-emerald-400'}`}>
                       {prod.stock}
@@ -113,7 +192,6 @@ export default function ProductList() {
                 </div>
               </div>
 
-              {/* Botones de acción */}
               <div className="flex items-center gap-2 self-end sm:self-auto">
                 <button
                   onClick={() => descontarStock(prod, 1)}
@@ -128,7 +206,7 @@ export default function ProductList() {
                     placeholder="Lote"
                     value={cantidadLote}
                     onChange={(e) => handleLoteChange(prod.id, e.target.value)}
-                    className="w-14 bg-transparent text-center text-xs text-slate-100 focus:outline-none"
+                    className="w-14 bg-transparent text-center text-xs text-slate-100 focus:outline-none font-mono"
                   />
                   <button
                     onClick={() => {
@@ -149,6 +227,26 @@ export default function ProductList() {
           );
         })}
       </div>
+
+      {/* Modal Cámara */}
+      {mostrarCamaraModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-4 space-y-3">
+            <div className="flex justify-between items-center">
+              <h4 className="text-sm font-bold text-slate-100">Apunta al código de barras</h4>
+              <button onClick={() => setMostrarCamaraModal(false)} className="text-slate-400">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <Scanner
+              onScan={(codigo) => {
+                handleEscaneoDirecto(codigo);
+                setMostrarCamaraModal(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

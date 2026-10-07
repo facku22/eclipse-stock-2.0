@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import Scanner from './Scanner';
 import BarcodeSVG from 'react-barcode';
-import { Edit2, Barcode, Camera, Check, X, Search, Tag, Trash2, Printer, AlertTriangle, Filter } from 'lucide-react';
+import { Edit2, Barcode, Camera, Check, X, Search, Tag, Trash2, Printer, AlertTriangle, Filter, Download } from 'lucide-react';
 
 export default function AdminProductList() {
   const [productos, setProductos] = useState([]);
@@ -10,13 +10,13 @@ export default function AdminProductList() {
   const [soloStockBajo, setSoloStockBajo] = useState(false);
   const [editando, setEditando] = useState(null);
   const [imprimiendoProd, setImprimiendoProd] = useState(null);
-  
+
   const [formEdit, setFormEdit] = useState({
     codigo_modelo: '',
     codigo_barras: '',
     nombre: '',
     stock: 0,
-    precio: 0
+    precio: 0,
   });
   const [mostrarCamaraModal, setMostrarCamaraModal] = useState(false);
 
@@ -89,18 +89,37 @@ export default function AdminProductList() {
       (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
       (p.codigo_modelo || '').toLowerCase().includes(busqueda.toLowerCase()) ||
       (p.codigo_barras || '').toLowerCase().includes(busqueda.toLowerCase());
-    
+
     if (soloStockBajo) return coincideTexto && p.stock <= 5;
     return coincideTexto;
   });
 
-  const imprimirEtiqueta = () => {
-    window.print();
+  const exportarInventarioCSV = () => {
+    if (productosFiltrados.length === 0) return;
+
+    const encabezados = ['ID', 'Nombre', 'Codigo Modelo', 'Codigo Barras', 'Stock', 'Precio'];
+    const filas = productosFiltrados.map((p) => [
+      p.id,
+      `"${p.nombre}"`,
+      `"${p.codigo_modelo || ''}"`,
+      `"${p.codigo_barras || ''}"`,
+      p.stock,
+      p.precio || 0,
+    ]);
+
+    const contenidoCSV = 'data:text/csv;charset=utf-8,\uFEFF' + [encabezados.join(','), ...filas.map((f) => f.join(','))].join('\n');
+    const encodedUri = encodeURI(contenidoCSV);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'inventario_eclipse_stock.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
     <div className="space-y-4">
-      {/* Barra de Búsqueda y Filtro de Stock Bajo */}
+      {/* Barra de Búsqueda, Filtro y Exportación */}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
@@ -113,17 +132,27 @@ export default function AdminProductList() {
           />
         </div>
 
-        <button
-          onClick={() => setSoloStockBajo(!soloStockBajo)}
-          className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-semibold transition ${
-            soloStockBajo
-              ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
-              : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Filter className="w-4 h-4" />
-          Solo Stock Bajo (≤ 5)
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setSoloStockBajo(!soloStockBajo)}
+            className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition ${
+              soloStockBajo
+                ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
+                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            Stock Bajo (≤ 5)
+          </button>
+
+          <button
+            onClick={exportarInventarioCSV}
+            className="px-3.5 py-2.5 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-xl hover:bg-emerald-600/30 text-xs font-bold flex items-center gap-1.5 transition shrink-0"
+            title="Exportar inventario a Excel / CSV"
+          >
+            <Download className="w-4 h-4" /> Excel
+          </button>
+        </div>
       </div>
 
       {/* Lista de productos */}
@@ -157,11 +186,17 @@ export default function AdminProductList() {
                     )}
                   </div>
                   <div className="flex flex-wrap gap-x-3 text-xs text-slate-400 mt-0.5">
-                    <span>Modelo: <span className="font-mono text-slate-200">{prod.codigo_modelo || 'Sin modelo'}</span></span>
+                    <span>
+                      Modelo: <span className="font-mono text-slate-200">{prod.codigo_modelo || 'Sin modelo'}</span>
+                    </span>
                     <span>|</span>
-                    <span>Barras: <span className="font-mono text-indigo-400">{prod.codigo_barras || 'Sin registrar'}</span></span>
+                    <span>
+                      Barras: <span className="font-mono text-indigo-400">{prod.codigo_barras || 'Sin registrar'}</span>
+                    </span>
                     <span>|</span>
-                    <span>Stock: <strong className={esStockBajo ? 'text-amber-400' : 'text-emerald-400'}>{prod.stock}</strong></span>
+                    <span>
+                      Stock: <strong className={esStockBajo ? 'text-amber-400' : 'text-emerald-400'}>{prod.stock}</strong>
+                    </span>
                   </div>
                 </div>
               </div>
@@ -195,7 +230,7 @@ export default function AdminProductList() {
         })}
       </div>
 
-      {/* Modal de Edición */}
+      {/* Modal Edición */}
       {editando && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl p-6 space-y-4">
@@ -273,10 +308,10 @@ export default function AdminProductList() {
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setEditando(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200">
+                <button type="button" onClick={() => setEditando(null)} className="px-4 py-2 text-sm text-slate-400">
                   Cancelar
                 </button>
-                <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium text-sm flex items-center gap-2">
+                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium text-sm flex items-center gap-2">
                   <Check className="w-4 h-4" /> Guardar
                 </button>
               </div>
@@ -285,14 +320,13 @@ export default function AdminProductList() {
         </div>
       )}
 
-      {/* Modal e Impresión de Etiquetas */}
+      {/* Modal Impresión */}
       {imprimiendoProd && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-6 text-center space-y-4">
             <h3 className="text-base font-bold text-slate-100">Vista Previa de Etiqueta</h3>
 
-            {/* Contenedor imprimible */}
-            <div className="bg-white p-4 rounded-xl text-black flex flex-col items-center justify-center space-y-1 print:m-0 print:p-0">
+            <div className="bg-white p-4 rounded-xl text-black flex flex-col items-center justify-center space-y-1">
               <span className="font-bold text-sm tracking-tight">{imprimiendoProd.nombre}</span>
               <span className="text-xs text-gray-600 font-mono">Mod: {imprimiendoProd.codigo_modelo || '-'}</span>
               <BarcodeSVG
@@ -306,13 +340,13 @@ export default function AdminProductList() {
             <div className="flex justify-center gap-2 pt-2">
               <button
                 onClick={() => setImprimiendoProd(null)}
-                className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-sm hover:bg-slate-700"
+                className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-sm"
               >
                 Cerrar
               </button>
               <button
-                onClick={imprimirEtiqueta}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold flex items-center gap-2"
+                onClick={() => window.print()}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold flex items-center gap-2"
               >
                 <Printer className="w-4 h-4" /> Imprimir
               </button>
