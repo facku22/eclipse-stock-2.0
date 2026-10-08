@@ -1,12 +1,29 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import Scanner from './Scanner';
-import { Upload, Plus, Check, Camera, Barcode, Tag, DollarSign, Package, AlertCircle, X } from 'lucide-react';
+import { 
+  Upload, 
+  Plus, 
+  Check, 
+  Camera, 
+  Barcode, 
+  Tag, 
+  DollarSign, 
+  Package, 
+  AlertCircle, 
+  X, 
+  FileSpreadsheet, 
+  ChevronDown, 
+  ChevronUp 
+} from 'lucide-react';
 
 export default function ImportSheets() {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [mostrarCamaraModal, setMostrarCamaraModal] = useState(false);
+  
+  // Estado para controlar la visibilidad del formulario manual (desplegable)
+  const [desplegarManual, setDesplegarManual] = useState(false);
 
   // Formulario manual
   const [formManual, setFormManual] = useState({
@@ -20,16 +37,17 @@ export default function ImportSheets() {
   const inputCodigoBarrasRef = useRef(null);
 
   useEffect(() => {
-    if (inputCodigoBarrasRef.current) {
+    if (desplegarManual && inputCodigoBarrasRef.current) {
       inputCodigoBarrasRef.current.focus();
     }
-  }, []);
+  }, [desplegarManual]);
 
   const mostrarNotificacion = (texto, tipo = 'exito') => {
     setMensaje({ texto, tipo });
     setTimeout(() => setMensaje(null), 4000);
   };
 
+  // Cargar producto manualmente
   const handleAgregarManual = async (e) => {
     e.preventDefault();
     if (!formManual.nombre.trim()) {
@@ -76,8 +94,8 @@ export default function ImportSheets() {
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-6">
-      {/* Mensaje de estado */}
+    <div className="space-y-4">
+      {/* Mensaje de estado flotante/notificación */}
       {mensaje && (
         <div
           className={`p-3 rounded-xl text-xs font-semibold flex items-center gap-2 ${
@@ -91,110 +109,153 @@ export default function ImportSheets() {
         </div>
       )}
 
-      <div>
-        <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-          <Plus className="w-5 h-5 text-indigo-400" /> Carga Manual de Producto
-        </h2>
-        <p className="text-xs text-slate-400 mt-0.5">
-          Ingresá un nuevo ítem al inventario escaneando el código de barras con la pistola o la cámara.
-        </p>
+      {/* BLOQUE SUPERIOR: Importar desde Excel / Planilla */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div className="border-b border-slate-800 pb-3">
+          <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+            <FileSpreadsheet className="w-5 h-5 text-indigo-400" />
+            Importación Masiva (Excel / Google Sheets)
+          </h2>
+          <p className="text-xs text-slate-400 mt-1">
+            Subí un archivo <code className="text-indigo-300">.xlsx</code> o <code className="text-indigo-300">.csv</code> para actualizar tu inventario masivamente.
+          </p>
+        </div>
+
+        <div className="border-2 border-dashed border-slate-700/80 hover:border-indigo-500/50 rounded-2xl p-6 text-center transition cursor-pointer bg-slate-950/30">
+          <Upload className="w-8 h-8 text-indigo-400 mx-auto mb-2 animate-bounce" />
+          <p className="text-xs font-semibold text-slate-200">
+            Hacé clic acá para seleccionar tu archivo Excel o arrastralo
+          </p>
+          <p className="text-[10px] text-slate-500 mt-1">
+            Columnas soportadas: Nombre, Código Modelo, Código Barras, Stock, Precio
+          </p>
+        </div>
       </div>
 
-      <form onSubmit={handleAgregarManual} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* Código de Barras con botón de Cámara */}
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
-              <Barcode className="w-3.5 h-3.5 text-indigo-400" /> Código de Barras
-            </label>
-            <div className="flex gap-2">
-              <input
-                ref={inputCodigoBarrasRef}
-                type="text"
-                placeholder="Escanear con pistola..."
-                value={formManual.codigo_barras}
-                onChange={(e) => setFormManual({ ...formManual, codigo_barras: e.target.value })}
-                className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 font-mono text-xs focus:border-indigo-500 focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => setMostrarCamaraModal(true)}
-                className="p-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-xl hover:text-indigo-400 hover:border-indigo-500/50 transition"
-                title="Escanear con cámara"
-              >
-                <Camera className="w-4 h-4" />
-              </button>
+      {/* BLOQUE INFERIOR: Botón Desplegable para Agregar Producto Manualmente */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl transition-all">
+        <button
+          type="button"
+          onClick={() => setDesplegarManual(!desplegarManual)}
+          className="w-full p-4 flex items-center justify-between hover:bg-slate-800/50 transition text-left"
+        >
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg">
+              <Plus className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-100">Cargar Producto Manualmente</h3>
+              <p className="text-[11px] text-slate-400">Agregar un ítem individual escaneando o completando datos</p>
             </div>
           </div>
-
-          {/* Código de Modelo */}
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
-              <Tag className="w-3.5 h-3.5 text-slate-400" /> Código de Modelo / Artículo
-            </label>
-            <input
-              type="text"
-              placeholder="Ej: L1992"
-              value={formManual.codigo_modelo}
-              onChange={(e) => setFormManual({ ...formManual, codigo_modelo: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 font-mono text-xs focus:border-indigo-500 focus:outline-none"
-            />
-          </div>
-        </div>
-
-        {/* Nombre del Producto */}
-        <div>
-          <label className="block text-xs font-medium text-slate-300 mb-1">Nombre del Producto *</label>
-          <input
-            type="text"
-            placeholder="Ej: Exhibidor Fashion Stand"
-            value={formManual.nombre}
-            onChange={(e) => setFormManual({ ...formManual, nombre: e.target.value })}
-            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 text-xs focus:border-indigo-500 focus:outline-none"
-            required
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          {/* Stock Inicial */}
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
-              <Package className="w-3.5 h-3.5 text-emerald-400" /> Stock Inicial
-            </label>
-            <input
-              type="number"
-              min="0"
-              value={formManual.stock}
-              onChange={(e) => setFormManual({ ...formManual, stock: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 text-xs font-mono focus:border-indigo-500 focus:outline-none"
-            />
-          </div>
-
-          {/* Precio Unitario */}
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
-              <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Precio ($)
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="any"
-              value={formManual.precio}
-              onChange={(e) => setFormManual({ ...formManual, precio: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 text-xs font-mono focus:border-indigo-500 focus:outline-none"
-            />
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-950 transition"
-        >
-          <Plus className="w-4 h-4" />
-          {loading ? 'Guardando...' : 'Guardar Producto en Inventario'}
+          {desplegarManual ? (
+            <ChevronUp className="w-5 h-5 text-indigo-400" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-slate-400" />
+          )}
         </button>
-      </form>
+
+        {/* Formulario que se despliega */}
+        {desplegarManual && (
+          <div className="p-5 border-t border-slate-800 space-y-4 bg-slate-950/40">
+            <form onSubmit={handleAgregarManual} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Código de Barras con botón de Cámara */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
+                    <Barcode className="w-3.5 h-3.5 text-indigo-400" /> Código de Barras
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      ref={inputCodigoBarrasRef}
+                      type="text"
+                      placeholder="Escanear con pistola..."
+                      value={formManual.codigo_barras}
+                      onChange={(e) => setFormManual({ ...formManual, codigo_barras: e.target.value })}
+                      className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 font-mono text-xs focus:border-indigo-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setMostrarCamaraModal(true)}
+                      className="p-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-xl hover:text-indigo-400 hover:border-indigo-500/50 transition"
+                      title="Escanear con cámara"
+                    >
+                      <Camera className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Código de Modelo */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5 text-slate-400" /> Código de Modelo / Artículo
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: L1992"
+                    value={formManual.codigo_modelo}
+                    onChange={(e) => setFormManual({ ...formManual, codigo_modelo: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 font-mono text-xs focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Nombre del Producto */}
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Nombre del Producto *</label>
+                <input
+                  type="text"
+                  placeholder="Ej: Exhibidor Fashion Stand"
+                  value={formManual.nombre}
+                  onChange={(e) => setFormManual({ ...formManual, nombre: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 text-xs focus:border-indigo-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Stock Inicial */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
+                    <Package className="w-3.5 h-3.5 text-emerald-400" /> Stock Inicial
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formManual.stock}
+                    onChange={(e) => setFormManual({ ...formManual, stock: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 text-xs font-mono focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Precio Unitario */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
+                    <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Precio ($)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={formManual.precio}
+                    onChange={(e) => setFormManual({ ...formManual, precio: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 text-xs font-mono focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-950 transition"
+              >
+                <Plus className="w-4 h-4" />
+                {loading ? 'Guardando...' : 'Guardar Producto en Inventario'}
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
 
       {/* Modal Cámara Escáner */}
       {mostrarCamaraModal && (
