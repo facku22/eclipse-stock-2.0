@@ -12,7 +12,9 @@ import {
   X, 
   Zap, 
   DollarSign,
-  Edit3
+  Edit3,
+  Printer,
+  Receipt
 } from 'lucide-react';
 
 export default function CartSale({ onVentaRealizada }) {
@@ -23,7 +25,10 @@ export default function CartSale({ onVentaRealizada }) {
   const [mostrarCamaraModal, setMostrarCamaraModal] = useState(false);
   const [procesandoVenta, setProcesandoVenta] = useState(false);
 
-  // Estado para editar precio unitario temporalmente en el carrito
+  // Estado para guardar la última venta y permitir imprimir el ticket
+  const [ultimaVenta, setUltimaVenta] = useState(null);
+
+  // Estado para editar precio unitario temporalmente
   const [editandoPrecioId, setEditandoPrecioId] = useState(null);
   const [tempPrecio, setTempPrecio] = useState('');
 
@@ -47,7 +52,6 @@ export default function CartSale({ onVentaRealizada }) {
     setTimeout(() => setNotificacion(null), 3000);
   };
 
-  // Agregar producto al carrito
   const agregarAlCarrito = (producto) => {
     setCarrito((prev) => {
       const existeIndex = prev.findIndex((item) => item.id === producto.id);
@@ -76,7 +80,6 @@ export default function CartSale({ onVentaRealizada }) {
     setBusqueda('');
   };
 
-  // Manejar escaneo (Pistola / Entrada manual por Enter)
   const handleEscaneo = (codigo) => {
     const coincidencia = productos.find(
       (p) =>
@@ -98,7 +101,6 @@ export default function CartSale({ onVentaRealizada }) {
     }
   };
 
-  // Modificar cantidad
   const cambiarCantidad = (id, cambio) => {
     setCarrito((prev) =>
       prev
@@ -117,7 +119,6 @@ export default function CartSale({ onVentaRealizada }) {
     );
   };
 
-  // Guardar precio unitario modificado manualmente
   const guardarPrecioPersonalizado = (id) => {
     const precioNum = parseFloat(tempPrecio);
     if (!isNaN(precioNum) && precioNum >= 0) {
@@ -139,12 +140,112 @@ export default function CartSale({ onVentaRealizada }) {
     }
   };
 
-  // Totales
   const totalItems = carrito.reduce((acc, item) => acc + item.cantidadSeleccionada, 0);
   const totalMonto = carrito.reduce(
     (acc, item) => acc + item.cantidadSeleccionada * (item.precioUnitarioVenta || 0),
     0
   );
+
+  // Función para imprimir Ticket Comercial
+  const imprimirTicketComercial = (datosVenta) => {
+    const ventana = window.open('', '_blank');
+    if (!ventana) {
+      alert('Por favor permití las ventanas emergentes para imprimir el ticket.');
+      return;
+    }
+
+    const fechaActual = new Date().toLocaleString('es-AR');
+
+    let filasItemsHTML = '';
+    datosVenta.items.forEach((item) => {
+      const sub = item.cantidadSeleccionada * (item.precioUnitarioVenta || 0);
+      filasItemsHTML += `
+        <tr>
+          <td style="text-align: left; padding: 3px 0;">${item.nombre}</td>
+          <td style="text-align: center;">${item.cantidadSeleccionada}</td>
+          <td style="text-align: right;">$${item.precioUnitarioVenta || 0}</td>
+          <td style="text-align: right; font-weight: bold;">$${sub}</td>
+        </tr>
+      `;
+    });
+
+    ventana.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Ticket de Venta - ECLIPSE STOCK</title>
+          <style>
+            @page { margin: 0; size: 80mm auto; }
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              width: 280px; 
+              margin: 0 auto; 
+              padding: 10px; 
+              font-size: 11px; 
+              color: #000;
+              background: #fff;
+            }
+            .header { text-align: center; margin-bottom: 8px; border-b: 1px dashed #000; padding-bottom: 6px; }
+            .empresa { font-size: 16px; font-weight: bold; }
+            .subtitulo { font-size: 10px; margin-top: 2px; }
+            .info { font-size: 10px; margin-bottom: 8px; border-bottom: 1px dashed #000; padding-bottom: 6px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+            th { border-bottom: 1px solid #000; font-size: 10px; padding-bottom: 3px; }
+            .totales { border-top: 1px dashed #000; pt: 6px; margin-top: 6px; }
+            .total-line { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; margin-top: 4px; }
+            .footer { text-align: center; margin-top: 12px; font-size: 10px; border-top: 1px dashed #000; padding-top: 6px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="empresa">ECLIPSE STOCK</div>
+            <div class="subtitulo">COMPROBANTE DE VENTA</div>
+            <div class="subtitulo">Consumidor Final</div>
+          </div>
+
+          <div class="info">
+            <div>Fecha: ${fechaActual}</div>
+            <div>Atendido por: Caja 1</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align: left;">Art.</th>
+                <th style="text-align: center;">Cant</th>
+                <th style="text-align: right;">P.U.</th>
+                <th style="text-align: right;">Subt.</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filasItemsHTML}
+            </tbody>
+          </table>
+
+          <div class="totales">
+            <div style="display: flex; justify-content: space-between;">
+              <span>Cant. Artículos:</span>
+              <span>${datosVenta.totalItems}</span>
+            </div>
+            <div class="total-line">
+              <span>TOTAL:</span>
+              <span>$${datosVenta.totalMonto.toLocaleString()}</span>
+            </div>
+          </div>
+
+          <div class="footer">
+            <div>¡GRACIAS POR SU COMPRA!</div>
+            <div style="margin-top: 3px;">Conserve este ticket</div>
+          </div>
+
+          <script>
+            setTimeout(function() { window.print(); window.close(); }, 400);
+          </script>
+        </body>
+      </html>
+    `);
+    ventana.document.close();
+  };
 
   // Finalizar la Venta
   const finalizarVenta = async () => {
@@ -153,6 +254,12 @@ export default function CartSale({ onVentaRealizada }) {
     setProcesandoVenta(true);
 
     try {
+      const datosVentaRealizada = {
+        items: [...carrito],
+        totalItems,
+        totalMonto,
+      };
+
       for (const item of carrito) {
         const nuevoStock = Math.max(0, item.stock - item.cantidadSeleccionada);
 
@@ -175,10 +282,15 @@ export default function CartSale({ onVentaRealizada }) {
         ]);
       }
 
+      setUltimaVenta(datosVentaRealizada);
       mostrarMensaje(`¡Venta procesada con éxito por $${totalMonto.toLocaleString()}!`);
       setCarrito([]);
       await cargarProductos();
       if (onVentaRealizada) onVentaRealizada();
+
+      // Imprimir ticket automáticamente al confirmar venta
+      imprimirTicketComercial(datosVentaRealizada);
+
     } catch (err) {
       console.error(err);
       alert('Ocurrió un error al procesar la venta: ' + err.message);
@@ -237,7 +349,7 @@ export default function CartSale({ onVentaRealizada }) {
           </button>
         </div>
 
-        {/* Lista desplegable para búsqueda manual */}
+        {/* Búsqueda manual */}
         {productosSugeridos.length > 0 && (
           <div className="max-h-48 overflow-y-auto bg-slate-800 border border-slate-700 rounded-xl p-2 space-y-1">
             {productosSugeridos.map((prod) => (
@@ -281,9 +393,18 @@ export default function CartSale({ onVentaRealizada }) {
           </div>
 
           {carrito.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-500 py-12 space-y-2">
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-500 py-12 space-y-3">
               <Zap className="w-12 h-12 text-slate-600 animate-pulse" />
               <p className="text-sm font-medium">Escaneá con la pistola para sumar productos a la venta</p>
+              
+              {ultimaVenta && (
+                <button
+                  onClick={() => imprimirTicketComercial(ultimaVenta)}
+                  className="mt-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-bold flex items-center gap-2 transition"
+                >
+                  <Receipt className="w-4 h-4" /> Reimprimir Último Ticket
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-2.5 flex-1 overflow-y-auto max-h-[500px] pr-1">
@@ -295,7 +416,6 @@ export default function CartSale({ onVentaRealizada }) {
                     key={item.id}
                     className="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md"
                   >
-                    {/* Info Producto */}
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       {item.imagen_url ? (
                         <img
@@ -318,14 +438,11 @@ export default function CartSale({ onVentaRealizada }) {
                       </div>
                     </div>
 
-                    {/* Modificador de Cantidad y Precio */}
                     <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 border-slate-700/50 pt-2 sm:pt-0">
-                      {/* Control de Cantidad */}
                       <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-1">
                         <button
                           onClick={() => cambiarCantidad(item.id, -1)}
                           className="p-1 hover:bg-slate-800 text-slate-300 rounded transition"
-                          title="Restar 1"
                         >
                           <Minus className="w-3.5 h-3.5" />
                         </button>
@@ -335,13 +452,11 @@ export default function CartSale({ onVentaRealizada }) {
                         <button
                           onClick={() => cambiarCantidad(item.id, 1)}
                           className="p-1 hover:bg-slate-800 text-slate-300 rounded transition"
-                          title="Sumar 1"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
                       </div>
 
-                      {/* Precio Unitario / Edición en vivo */}
                       <div className="flex items-center gap-1 min-w-[100px] justify-end">
                         {editandoPrecioId === item.id ? (
                           <div className="flex items-center gap-1">
@@ -379,11 +494,9 @@ export default function CartSale({ onVentaRealizada }) {
                         )}
                       </div>
 
-                      {/* Botón Eliminar */}
                       <button
                         onClick={() => eliminarDelCarrito(item.id)}
                         className="p-1.5 text-slate-400 hover:text-red-400 transition"
-                        title="Quitar de la lista"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -395,7 +508,7 @@ export default function CartSale({ onVentaRealizada }) {
           )}
         </div>
 
-        {/* Panel Lateral de Cobro y Suma Total */}
+        {/* Panel Lateral de Cobro */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between space-y-4">
           <div className="space-y-4">
             <h3 className="font-bold text-slate-100 text-base border-b border-slate-800 pb-3">
@@ -413,7 +526,6 @@ export default function CartSale({ onVentaRealizada }) {
               </div>
             </div>
 
-            {/* Total General Destacado */}
             <div className="p-4 bg-gradient-to-br from-indigo-950/60 to-slate-900 border border-indigo-500/30 rounded-2xl space-y-1 shadow-lg">
               <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1">
                 <DollarSign className="w-4 h-4 text-emerald-400" /> Total a Cobrar
@@ -424,18 +536,20 @@ export default function CartSale({ onVentaRealizada }) {
             </div>
           </div>
 
-          <button
-            onClick={finalizarVenta}
-            disabled={carrito.length === 0 || procesandoVenta}
-            className={`w-full py-4 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-xl transition-all ${
-              carrito.length === 0 || procesandoVenta
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/60'
-            }`}
-          >
-            <CheckCircle2 className="w-5 h-5" />
-            {procesandoVenta ? 'Procesando Venta...' : 'Cobrar y Descontar Stock'}
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={finalizarVenta}
+              disabled={carrito.length === 0 || procesandoVenta}
+              className={`w-full py-4 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-xl transition-all ${
+                carrito.length === 0 || procesandoVenta
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/60'
+              }`}
+            >
+              <Printer className="w-5 h-5" />
+              {procesandoVenta ? 'Procesando Venta...' : 'Cobrar e Imprimir Ticket'}
+            </button>
+          </div>
         </div>
       </div>
 
