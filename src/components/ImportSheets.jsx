@@ -1,399 +1,214 @@
-import React, { useState } from 'react';
-import ExcelJS from 'exceljs';
+import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { Upload, FileSpreadsheet, RefreshCw, CheckCircle, AlertTriangle, PlusCircle, X, Image as ImageIcon } from 'lucide-react';
+import Scanner from './Scanner';
+import { Upload, Plus, Check, Camera, Barcode, Tag, DollarSign, Package, AlertCircle } from 'lucide-react';
 
-export default function ImportSheets({ onSuccess }) {
+export default function ImportSheets() {
   const [loading, setLoading] = useState(false);
-  const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
+  const [mensaje, setMensaje] = useState(null);
+  const [mostrarCamaraModal, setMostrarCamaraModal] = useState(false);
 
-  // Estados para el Modal de Agregar Producto Manual
-  const [mostrarModalNuevoProducto, setMostrarModalNuevoProducto] = useState(false);
-  const [guardandoProducto, setGuardandoProducto] = useState(false);
-  const [nuevoProducto, setNuevoProducto] = useState({
+  // Formulario manual
+  const [formManual, setFormManual] = useState({
     nombre: '',
     codigo_modelo: '',
     codigo_barras: '',
-    stock: 0,
-    imagen_url: ''
+    stock: 1,
+    precio: 0,
   });
 
-  const tieneChino = (text) => /[\u4e00-\u9fa5]/.test(text);
+  const inputCodigoBarrasRef = useRef(null);
 
-  const extraerNumero = (val) => {
-    if (val === null || val === undefined) return 0;
-    if (typeof val === 'object') {
-      val = val.result !== undefined ? val.result : val.value;
+  // Focus en el código de barras si abre el módulo
+  useEffect(() => {
+    if (inputCodigoBarrasRef.current) {
+      inputCodigoBarrasRef.current.focus();
     }
-    const str = String(val).replace(/[^0-9]/g, '');
-    const num = parseInt(str, 10);
-    return !isNaN(num) ? num : 0;
+  }, []);
+
+  const mostrarNotificacion = (texto, tipo = 'exito') => {
+    setMensaje({ texto, tipo });
+    setTimeout(() => setMensaje(null), 4000);
   };
 
-  // Convertir imagen seleccionada localmente a Base64
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert('La imagen es demasiado grande. Por favor seleccioná una imagen de menos de 5MB.');
+  // Cargar producto manualmente
+  const handleAgregarManual = async (e) => {
+    e.preventDefault();
+    if (!formManual.nombre.trim()) {
+      mostrarNotificacion('El nombre del producto es obligatorio', 'error');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setNuevoProducto((prev) => ({ ...prev, imagen_url: reader.result }));
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
     setLoading(true);
-    setMensaje({ tipo: '', texto: '' });
 
     try {
-      const { data: productosExistentes, error: errorFetch } = await supabase
-        .from('productos')
-        .select('codigo_barras, stock, imagen_url');
-
-      if (errorFetch) throw errorFetch;
-
-      const mapaExistentes = new Map();
-      (productosExistentes || []).forEach((p) => {
-        mapaExistentes.set(p.codigo_barras, p);
-      });
-
-      const workbook = new ExcelJS.Workbook();
-      const arrayBuffer = await file.arrayBuffer();
-      await workbook.xlsx.load(arrayBuffer);
-
-      const worksheet = workbook.worksheets[0];
-      const productosMap = new Map();
-
-      const imagesMap = new Map();
-      worksheet.getImages().forEach((image) => {
-        const imgObj = workbook.model.media[image.imageId];
-        if (imgObj) {
-          const base64 = `data:${imgObj.type};base64,${imgObj.buffer.toString('base64')}`;
-          const rowNumber = Math.floor(image.range.tl.row) + 1;
-          imagesMap.set(rowNumber, base64);
-        }
-      });
-
-      worksheet.eachRow((row, rowNumber) => {
-        const colCliente = String(row.getCell(1).value || '').trim();
-        const colModelo = String(row.getCell(2).value || '').trim();
-        const colFotoUrl = String(row.getCell(3).value || '').trim();
-        const colNombre = String(row.getCell(4).value || '').trim();
-
-        const codigo = colModelo || colCliente;
-
-        if (
-          !codigo ||
-          tieneChino(codigo) ||
-          codigo.toLowerCase().includes('item') ||
-          codigo.toLowerCase().includes('model') ||
-          codigo.toLowerCase().includes('no.') ||
-          codigo.toLowerCase().includes('número')
-        ) {
-          return;
-        }
-
-        if (
-          !colNombre ||
-          tieneChino(colNombre) ||
-          colNombre.toLowerCase().includes('description') ||
-          colNombre.toLowerCase().includes('nombre')
-        ) {
-          return;
-        }
-
-        let imagenFinal = imagesMap.get(rowNumber) || null;
-        if (!imagenFinal && (colFotoUrl.startsWith('http://') || colFotoUrl.startsWith('https://'))) {
-          imagenFinal = colFotoUrl;
-        }
-
-        const qtyPorCaja = extraerNumero(row.getCell(7).value);
-        const cantidadCajas = extraerNumero(row.getCell(8).value);
-
-        let stockNuevoIngreso = 0;
-        if (qtyPorCaja > 0 && cantidadCajas > 0) {
-          stockNuevoIngreso = qtyPorCaja * cantidadCajas;
-        } else if (qtyPorCaja > 0) {
-          stockNuevoIngreso = qtyPorCaja;
-        } else if (cantidadCajas > 0) {
-          stockNuevoIngreso = cantidadCajas;
-        } else {
-          for (let colIdx = 5; colIdx <= 10; colIdx++) {
-            const valNum = extraerNumero(row.getCell(colIdx).value);
-            if (valNum > 0) {
-              stockNuevoIngreso = valNum;
-              break;
-            }
-          }
-        }
-
-        const existente = mapaExistentes.get(codigo);
-        const stockActualEnBD = existente ? existente.stock : 0;
-        const stockFinal = stockActualEnBD + stockNuevoIngreso;
-
-        const imagenDefinitiva = imagenFinal || (existente ? existente.imagen_url : null);
-
-        productosMap.set(codigo, {
-          codigo_barras: codigo,
-          nombre: colNombre,
-          stock: stockFinal,
-          precio: 0,
-          imagen_url: imagenDefinitiva,
-        });
-      });
-
-      const productosAInsertar = Array.from(productosMap.values());
-
-      if (productosAInsertar.length === 0) {
-        throw new Error('No se encontraron productos válidos en el archivo Excel.');
-      }
-
-      const { error } = await supabase
-        .from('productos')
-        .upsert(productosAInsertar, { onConflict: 'codigo_barras' });
+      const { error } = await supabase.from('productos').insert([
+        {
+          nombre: formManual.nombre.trim(),
+          codigo_modelo: formManual.codigo_modelo.trim() || null,
+          codigo_barras: formManual.codigo_barras.trim() || null,
+          stock: Number(formManual.stock) || 0,
+          precio: Number(formManual.precio) || 0,
+        },
+      ]);
 
       if (error) throw error;
 
-      setMensaje({
-        tipo: 'exito',
-        texto: `¡Listo! Se procesaron ${productosAInsertar.length} productos SUMANDO el stock nuevo al inventario actual y creando los artículos nuevos.`,
+      mostrarNotificacion(`¡Producto "${formManual.nombre}" guardado con éxito!`);
+      setFormManual({
+        nombre: '',
+        codigo_modelo: '',
+        codigo_barras: '',
+        stock: 1,
+        precio: 0,
       });
 
-      if (onSuccess) onSuccess();
+      if (inputCodigoBarrasRef.current) inputCodigoBarrasRef.current.focus();
     } catch (err) {
-      console.error('Error al importar:', err);
-      setMensaje({
-        tipo: 'error',
-        texto: err.message || 'Error al procesar el archivo Excel.',
-      });
+      console.error(err);
+      mostrarNotificacion('Error al crear producto: ' + err.message, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCrearProductoManual = async (e) => {
-    e.preventDefault();
-    setGuardandoProducto(true);
-
-    try {
-      const { error } = await supabase.from('productos').insert([
-        {
-          nombre: nuevoProducto.nombre,
-          codigo_modelo: nuevoProducto.codigo_modelo || null,
-          codigo_barras: nuevoProducto.codigo_barras || nuevoProducto.codigo_modelo || null,
-          stock: parseInt(nuevoProducto.stock, 10) || 0,
-          imagen_url: nuevoProducto.imagen_url || null,
-          precio: 0
-        }
-      ]);
-
-      if (error) throw error;
-
-      setMensaje({
-        tipo: 'exito',
-        texto: `Se agregó el producto "${nuevoProducto.nombre}" correctamente.`,
-      });
-
-      setNuevoProducto({ nombre: '', codigo_modelo: '', codigo_barras: '', stock: 0, imagen_url: '' });
-      setMostrarModalNuevoProducto(false);
-
-      if (onSuccess) onSuccess();
-    } catch (err) {
-      console.error('Error al guardar producto:', err);
-      alert('Error al guardar el producto: ' + (err.message || 'Verificá los datos.'));
-    } finally {
-      setGuardandoProducto(false);
-    }
+  const handleScanCamara = (codigo) => {
+    setFormManual((prev) => ({ ...prev, codigo_barras: codigo }));
+    setMostrarCamaraModal(false);
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-700/80 p-5 rounded-2xl shadow-lg space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">
-          <FileSpreadsheet className="w-6 h-6" />
-        </div>
-        <div>
-          <h3 className="text-base font-bold text-slate-100">Importar Stock Acumulativo (.xlsx)</h3>
-          <p className="text-xs text-slate-400">
-            Suma la cantidad nueva al stock existente en sistema y crea automáticamente los productos nuevos.
-          </p>
-        </div>
-      </div>
-
-      <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-700 hover:border-emerald-500/50 bg-slate-800/40 rounded-xl cursor-pointer transition hover:bg-slate-800/60 group">
-        <div className="flex flex-col items-center justify-center pt-5 pb-6">
-          {loading ? (
-            <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mb-2" />
-          ) : (
-            <Upload className="w-8 h-8 text-slate-400 group-hover:text-emerald-400 transition mb-2" />
-          )}
-          <p className="text-sm text-slate-300 font-medium text-center px-4">
-            {loading ? 'Calculando y sumando stock...' : 'Hacé clic acá para seleccionar tu archivo .xlsx'}
-          </p>
-        </div>
-        <input
-          type="file"
-          accept=".xlsx"
-          onChange={handleFileUpload}
-          disabled={loading}
-          className="hidden"
-        />
-      </label>
-
-      {/* Botón para agregar producto manual */}
-      <button
-        type="button"
-        onClick={() => setMostrarModalNuevoProducto(true)}
-        className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-950/40 transition-all text-sm"
-      >
-        <PlusCircle className="w-5 h-5" />
-        Agregar Producto Manual
-      </button>
-
-      {mensaje.texto && (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-6">
+      {/* Mensaje de estado */}
+      {mensaje && (
         <div
-          className={`p-3 rounded-xl border flex items-center gap-2 text-xs font-medium ${
+          className={`p-3 rounded-xl text-xs font-semibold flex items-center gap-2 ${
             mensaje.tipo === 'exito'
-              ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
-              : 'bg-red-500/10 text-red-300 border-red-500/20'
+              ? 'bg-emerald-950/80 border border-emerald-500/30 text-emerald-300'
+              : 'bg-red-950/80 border border-red-500/30 text-red-300'
           }`}
         >
-          {mensaje.tipo === 'exito' ? (
-            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-          ) : (
-            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-          )}
-          <span>{mensaje.texto}</span>
+          {mensaje.tipo === 'exito' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {mensaje.texto}
         </div>
       )}
 
-      {/* Modal Formulario para Crear Nuevo Producto */}
-      {mostrarModalNuevoProducto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-md w-full shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setMostrarModalNuevoProducto(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-200"
-            >
-              <X className="w-5 h-5" />
-            </button>
+      <div>
+        <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+          <Plus className="w-5 h-5 text-indigo-400" /> Carga Manual de Producto
+        </h2>
+        <p className="text-xs text-slate-400 mt-0.5">
+          Ingresá un nuevo ítem al inventario escaneando el código de barras con la pistola o la cámara.
+        </p>
+      </div>
 
-            <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-              <PlusCircle className="w-5 h-5 text-indigo-400" />
-              Agregar Producto Manual
-            </h3>
+      <form onSubmit={handleAgregarManual} className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Código de Barras con botón de Cámara */}
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
+              <Barcode className="w-3.5 h-3.5 text-indigo-400" /> Código de Barras
+            </label>
+            <div className="flex gap-2">
+              <input
+                ref={inputCodigoBarrasRef}
+                type="text"
+                placeholder="Escanear con pistola..."
+                value={formManual.codigo_barras}
+                onChange={(e) => setFormManual({ ...formManual, codigo_barras: e.target.value })}
+                className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 font-mono text-xs focus:border-indigo-500 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setMostrarCamaraModal(true)}
+                className="p-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-xl hover:text-indigo-400 hover:border-indigo-500/50 transition"
+                title="Escanear con cámara"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
 
-            <form onSubmit={handleCrearProductoManual} className="space-y-3">
-              <div>
-                <label className="block text-xs text-slate-400 mb-1 font-medium">Nombre del Producto *</label>
-                <input
-                  type="text"
-                  required
-                  value={nuevoProducto.nombre}
-                  onChange={(e) => setNuevoProducto({ ...nuevoProducto, nombre: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
-                  placeholder="Ej. Guiso de Ternera"
-                />
-              </div>
+          {/* Código de Modelo */}
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
+              <Tag className="w-3.5 h-3.5 text-slate-400" /> Código de Modelo / Artículo
+            </label>
+            <input
+              type="text"
+              placeholder="Ej: L1992"
+              value={formManual.codigo_modelo}
+              onChange={(e) => setFormManual({ ...formManual, codigo_modelo: e.target.value })}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 font-mono text-xs focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+        </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1 font-medium">Código Modelo</label>
-                  <input
-                    type="text"
-                    value={nuevoProducto.codigo_modelo}
-                    onChange={(e) => setNuevoProducto({ ...nuevoProducto, codigo_modelo: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
-                    placeholder="Ej. MOD-102"
-                  />
-                </div>
+        {/* Nombre del Producto */}
+        <div>
+          <label className="block text-xs font-medium text-slate-300 mb-1">Nombre del Producto *</label>
+          <input
+            type="text"
+            placeholder="Ej: Exhibidor Fashion Stand"
+            value={formManual.nombre}
+            onChange={(e) => setFormManual({ ...formManual, nombre: e.target.value })}
+            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 text-xs focus:border-indigo-500 focus:outline-none"
+            required
+          />
+        </div>
 
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1 font-medium">Código de Barras</label>
-                  <input
-                    type="text"
-                    value={nuevoProducto.codigo_barras}
-                    onChange={(e) => setNuevoProducto({ ...nuevoProducto, codigo_barras: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
-                    placeholder="779123456789"
-                  />
-                </div>
-              </div>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Stock Inicial */}
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
+              <Package className="w-3.5 h-3.5 text-emerald-400" /> Stock Inicial
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={formManual.stock}
+              onChange={(e) => setFormManual({ ...formManual, stock: e.target.value })}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 text-xs font-mono focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
 
-              <div>
-                <label className="block text-xs text-slate-400 mb-1 font-medium">Stock Inicial *</label>
-                <input
-                  type="number"
-                  min="0"
-                  required
-                  value={nuevoProducto.stock}
-                  onChange={(e) => setNuevoProducto({ ...nuevoProducto, stock: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
-                />
-              </div>
+          {/* Precio Unitario */}
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
+              <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Precio ($)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={formManual.precio}
+              onChange={(e) => setFormManual({ ...formManual, precio: e.target.value })}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 text-xs font-mono focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+        </div>
 
-              {/* Cargar Foto de Galería o Cámara */}
-              <div>
-                <label className="block text-xs text-slate-400 mb-1 font-medium">Imagen del Producto</label>
-                <div className="flex items-center gap-3">
-                  <label className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 bg-slate-800 border border-dashed border-slate-600 hover:border-indigo-500 rounded-xl cursor-pointer transition text-xs text-slate-300 font-medium">
-                    <ImageIcon className="w-4 h-4 text-indigo-400" />
-                    {nuevoProducto.imagen_url ? 'Cambiar Imagen' : 'Seleccionar Foto'}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageChange}
-                      className="hidden"
-                    />
-                  </label>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-950 transition"
+        >
+          <Plus className="w-4 h-4" />
+          {loading ? 'Guardando...' : 'Guardar Producto en Inventario'}
+        </button>
+      </form>
 
-                  {/* Vista Previa de la Foto */}
-                  {nuevoProducto.imagen_url && (
-                    <div className="relative w-12 h-12 shrink-0">
-                      <img
-                        src={nuevoProducto.imagen_url}
-                        alt="Previsualización"
-                        className="w-12 h-12 object-cover rounded-lg border border-slate-700"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setNuevoProducto((prev) => ({ ...prev, imagen_url: '' }))}
-                        className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold"
-                        title="Quitar foto"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setMostrarModalNuevoProducto(false)}
-                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={guardandoProducto}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1"
-                >
-                  {guardandoProducto ? 'Guardando...' : 'Guardar Producto'}
-                </button>
-              </div>
-            </form>
+      {/* Modal Cámara Escáner */}
+      {mostrarCamaraModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-4 space-y-3">
+            <div className="flex justify-between items-center">
+              <h4 className="text-sm font-bold text-slate-100">Escaneando Código de Barras...</h4>
+              <button onClick={() => setMostrarCamaraModal(false)} className="text-slate-400">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <Scanner onScan={handleScanCamara} />
           </div>
         </div>
       )}
