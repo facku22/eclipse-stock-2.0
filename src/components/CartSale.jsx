@@ -25,7 +25,7 @@ export default function CartSale({ onVentaRealizada }) {
   const [mostrarCamaraModal, setMostrarCamaraModal] = useState(false);
   const [procesandoVenta, setProcesandoVenta] = useState(false);
 
-  // Estado para guardar la última venta y permitir imprimir el ticket
+  // Estado para guardar la última venta y permitir reimprimir el ticket
   const [ultimaVenta, setUltimaVenta] = useState(null);
 
   // Estado para editar precio unitario temporalmente
@@ -146,7 +146,7 @@ export default function CartSale({ onVentaRealizada }) {
     0
   );
 
-  // Función para imprimir Ticket Comercial
+  // Función con CSS Adaptativo Universal (58mm y 80mm Autoadaptable)
   const imprimirTicketComercial = (datosVenta) => {
     const ventana = window.open('', '_blank');
     if (!ventana) {
@@ -154,18 +154,25 @@ export default function CartSale({ onVentaRealizada }) {
       return;
     }
 
-    const fechaActual = new Date().toLocaleString('es-AR');
+    const fechaActual = new Date().toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
     let filasItemsHTML = '';
     datosVenta.items.forEach((item) => {
       const sub = item.cantidadSeleccionada * (item.precioUnitarioVenta || 0);
       filasItemsHTML += `
-        <tr>
-          <td style="text-align: left; padding: 3px 0;">${item.nombre}</td>
-          <td style="text-align: center;">${item.cantidadSeleccionada}</td>
-          <td style="text-align: right;">$${item.precioUnitarioVenta || 0}</td>
-          <td style="text-align: right; font-weight: bold;">$${sub}</td>
-        </tr>
+        <div class="item-block">
+          <div class="prod-nombre">${item.nombre}</div>
+          <div class="linea-valores">
+            <span>${item.cantidadSeleccionada} x $${(item.precioUnitarioVenta || 0).toLocaleString()}</span>
+            <span class="subtotal">$${sub.toLocaleString()}</span>
+          </div>
+        </div>
       `;
     });
 
@@ -173,73 +180,110 @@ export default function CartSale({ onVentaRealizada }) {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Ticket de Venta - ECLIPSE STOCK</title>
+          <title>Ticket - ECLIPSE STOCK</title>
           <style>
-            @page { margin: 0; size: 80mm auto; }
-            body { 
-              font-family: 'Courier New', Courier, monospace; 
-              width: 280px; 
-              margin: 0 auto; 
-              padding: 10px; 
-              font-size: 11px; 
-              color: #000;
-              background: #fff;
+            /* Reset estricto para que la impresora controle el ancho real del rollo */
+            @page {
+              margin: 0;
+              size: auto;
             }
-            .header { text-align: center; margin-bottom: 8px; border-b: 1px dashed #000; padding-bottom: 6px; }
-            .empresa { font-size: 16px; font-weight: bold; }
-            .subtitulo { font-size: 10px; margin-top: 2px; }
-            .info { font-size: 10px; margin-bottom: 8px; border-bottom: 1px dashed #000; padding-bottom: 6px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-            th { border-bottom: 1px solid #000; font-size: 10px; padding-bottom: 3px; }
-            .totales { border-top: 1px dashed #000; pt: 6px; margin-top: 6px; }
-            .total-line { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; margin-top: 4px; }
-            .footer { text-align: center; margin-top: 12px; font-size: 10px; border-top: 1px dashed #000; padding-top: 6px; }
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: #ffffff;
+              color: #000000;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 12px;
+              line-height: 1.25;
+              width: 100%;
+            }
+            .ticket-container {
+              width: 100%;
+              max-width: 100%;
+              padding: 6px 8px;
+              box-sizing: border-box;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .empresa { font-size: 15px; font-weight: 900; letter-spacing: 1px; }
+            .divisor { border-top: 1px dashed #000; margin: 6px 0; }
+            
+            /* Items en Flexbox para adaptarse fluidamente a 58mm u 80mm */
+            .item-block {
+              margin-bottom: 4px;
+            }
+            .prod-nombre {
+              font-weight: bold;
+              font-size: 11px;
+              word-break: break-word;
+            }
+            .linea-valores {
+              display: flex;
+              justify-content: space-between;
+              font-size: 11px;
+              padding-bottom: 2px;
+              border-bottom: 1px dotted #bbb;
+            }
+            .subtotal { font-weight: bold; }
+            
+            .flex-row {
+              display: flex;
+              justify-content: space-between;
+              font-size: 11px;
+            }
+            .total-box {
+              font-size: 14px;
+              font-weight: 900;
+              margin-top: 4px;
+            }
+            .footer { font-size: 10px; margin-top: 8px; }
           </style>
         </head>
         <body>
-          <div class="header">
-            <div class="empresa">ECLIPSE STOCK</div>
-            <div class="subtitulo">COMPROBANTE DE VENTA</div>
-            <div class="subtitulo">Consumidor Final</div>
-          </div>
+          <div class="ticket-container">
+            <div class="center empresa">ECLIPSE STOCK</div>
+            <div class="center bold" style="font-size: 10px; margin-top: 2px;">TICKET NO VÁLIDO COMO FACTURA</div>
+            <div class="center" style="font-size: 10px;">Comprobante de Venta</div>
 
-          <div class="info">
-            <div>Fecha: ${fechaActual}</div>
-            <div>Atendido por: Caja 1</div>
-          </div>
+            <div class="divisor"></div>
 
-          <table>
-            <thead>
-              <tr>
-                <th style="text-align: left;">Art.</th>
-                <th style="text-align: center;">Cant</th>
-                <th style="text-align: right;">P.U.</th>
-                <th style="text-align: right;">Subt.</th>
-              </tr>
-            </thead>
-            <tbody>
+            <div style="font-size: 10px;">
+              <div class="flex-row"><span>Fecha:</span> <span>${fechaActual}</span></div>
+              <div class="flex-row"><span>Caja:</span> <span>Principal</span></div>
+            </div>
+
+            <div class="divisor"></div>
+
+            <div class="items-lista">
               ${filasItemsHTML}
-            </tbody>
-          </table>
-
-          <div class="totales">
-            <div style="display: flex; justify-content: space-between;">
-              <span>Cant. Artículos:</span>
-              <span>${datosVenta.totalItems}</span>
             </div>
-            <div class="total-line">
-              <span>TOTAL:</span>
-              <span>$${datosVenta.totalMonto.toLocaleString()}</span>
-            </div>
-          </div>
 
-          <div class="footer">
-            <div>¡GRACIAS POR SU COMPRA!</div>
-            <div style="margin-top: 3px;">Conserve este ticket</div>
+            <div class="divisor"></div>
+
+            <div>
+              <div class="flex-row">
+                <span>Cant. Artículos:</span>
+                <span class="bold">${datosVenta.totalItems}</span>
+              </div>
+              <div class="flex-row total-box">
+                <span>TOTAL:</span>
+                <span>$${datosVenta.totalMonto.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div class="divisor"></div>
+
+            <div class="center footer">
+              <div class="bold">¡GRACIAS POR SU COMPRA!</div>
+              <div>Conserve este ticket</div>
+            </div>
           </div>
 
           <script>
-            setTimeout(function() { window.print(); window.close(); }, 400);
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
           </script>
         </body>
       </html>
@@ -288,7 +332,7 @@ export default function CartSale({ onVentaRealizada }) {
       await cargarProductos();
       if (onVentaRealizada) onVentaRealizada();
 
-      // Imprimir ticket automáticamente al confirmar venta
+      // Lanzar impresión de ticket térmico
       imprimirTicketComercial(datosVentaRealizada);
 
     } catch (err) {
