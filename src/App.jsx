@@ -1,11 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import ProductList from './components/ProductList';
+import CartSale from './components/CartSale';
 import AdminProductList from './components/AdminProductList';
 import ImportSheets from './components/ImportSheets';
 import HistoryList from './components/HistoryList';
 import Scanner from './components/Scanner';
 import InstallPrompt from './components/InstallPrompt';
-import { LayoutGrid, ShieldCheck, Barcode, Camera, X, Lock, LogOut, KeyRound, UserCheck, History } from 'lucide-react';
+import { 
+  ShoppingCart, 
+  LayoutGrid, 
+  ShieldCheck, 
+  Barcode, 
+  Camera, 
+  X, 
+  Lock, 
+  LogOut, 
+  KeyRound, 
+  UserCheck, 
+  History 
+} from 'lucide-react';
 
 const CLAVE_EMPLEADO = '2580';
 const CLAVE_ADMIN = 'admin2580';
@@ -15,15 +28,15 @@ export default function App() {
   const [claveInput, setClaveInput] = useState('');
   const [errorLogin, setErrorLogin] = useState('');
 
-  const [tabActiva, setTabActiva] = useState('empleados'); // 'empleados' | 'admin' | 'historial'
+  const [tabActiva, setTabActiva] = useState('pos'); // 'pos' | 'empleados' | 'admin' | 'historial'
   const [mostrarEscanerGeneral, setMostrarEscanerGeneral] = useState(false);
 
   useEffect(() => {
     const sesionGuardada = localStorage.getItem('eclipse_stock_sesion');
     if (sesionGuardada) {
       setUsuario(sesionGuardada);
-      if (sesionGuardada === 'empleado') setTabActiva('empleados');
-      if (sesionGuardada === 'admin') setTabActiva('admin');
+      if (sesionGuardada === 'empleado') setTabActiva('pos');
+      if (sesionGuardada === 'admin') setTabActiva('pos');
     }
   }, []);
 
@@ -33,12 +46,12 @@ export default function App() {
 
     if (claveInput === CLAVE_ADMIN) {
       setUsuario('admin');
-      setTabActiva('admin');
+      setTabActiva('pos');
       localStorage.setItem('eclipse_stock_sesion', 'admin');
       setClaveInput('');
     } else if (claveInput === CLAVE_EMPLEADO) {
       setUsuario('empleado');
-      setTabActiva('empleados');
+      setTabActiva('pos');
       localStorage.setItem('eclipse_stock_sesion', 'empleado');
       setClaveInput('');
     } else {
@@ -138,24 +151,36 @@ export default function App() {
 
       {/* Navegación Tabs */}
       <nav className="bg-slate-900/40 border-b border-slate-800/80 px-4">
-        <div className="max-w-4xl mx-auto flex gap-2 pt-3">
+        <div className="max-w-4xl mx-auto flex gap-2 pt-3 overflow-x-auto">
+          <button
+            onClick={() => setTabActiva('pos')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-semibold border-b-2 transition shrink-0 ${
+              tabActiva === 'pos'
+                ? 'border-indigo-500 text-indigo-400 bg-slate-900/80'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
+            }`}
+          >
+            <ShoppingCart className="w-4 h-4" />
+            Punto de Venta (POS)
+          </button>
+
           <button
             onClick={() => setTabActiva('empleados')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-semibold border-b-2 transition ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-semibold border-b-2 transition shrink-0 ${
               tabActiva === 'empleados'
                 ? 'border-indigo-500 text-indigo-400 bg-slate-900/80'
                 : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
             }`}
           >
             <LayoutGrid className="w-4 h-4" />
-            Ventas / Stock
+            Consulta Stock
           </button>
 
           {usuario === 'admin' && (
             <>
               <button
                 onClick={() => setTabActiva('admin')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-semibold border-b-2 transition ${
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-semibold border-b-2 transition shrink-0 ${
                   tabActiva === 'admin'
                     ? 'border-indigo-500 text-indigo-400 bg-slate-900/80'
                     : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
@@ -167,7 +192,7 @@ export default function App() {
 
               <button
                 onClick={() => setTabActiva('historial')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-semibold border-b-2 transition ${
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-semibold border-b-2 transition shrink-0 ${
                   tabActiva === 'historial'
                     ? 'border-indigo-500 text-indigo-400 bg-slate-900/80'
                     : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
@@ -183,6 +208,8 @@ export default function App() {
 
       {/* Contenido */}
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 space-y-6">
+        {tabActiva === 'pos' && <CartSale />}
+
         {tabActiva === 'empleados' && <ProductList />}
 
         {tabActiva === 'admin' && usuario === 'admin' && (

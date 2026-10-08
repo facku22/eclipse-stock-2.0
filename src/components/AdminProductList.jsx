@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import Scanner from './Scanner';
 import BarcodeSVG from 'react-barcode';
-import { Edit2, Barcode, Camera, Check, X, Search, Tag, Trash2, Printer, AlertTriangle, Filter, Download } from 'lucide-react';
+import { Edit2, Barcode, Camera, Check, X, Search, Tag, Trash2, Printer, AlertTriangle, Filter, Download, Sliders } from 'lucide-react';
 
 export default function AdminProductList() {
   const [productos, setProductos] = useState([]);
@@ -10,7 +10,12 @@ export default function AdminProductList() {
   const [soloStockBajo, setSoloStockBajo] = useState(false);
   const [editando, setEditando] = useState(null);
   const [imprimiendoProd, setImprimiendoProd] = useState(null);
-  
+
+  // Configuración personalizable de etiquetas
+  const [anchoBarras, setAnchoBarras] = useState(2);
+  const [altoBarras, setAltoBarras] = useState(60);
+  const [tamanoFuente, setTamanoFuente] = useState(14);
+
   // Estado para la ventana flotante de imagen ampliada
   const [imagenSeleccionada, setImagenSeleccionada] = useState(null);
 
@@ -118,6 +123,106 @@ export default function AdminProductList() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // Genera un código EAN/CODE128 de 13 dígitos para que las barras se vean completas y profesionales
+  const obtenerCodigoCompleto = (prod) => {
+    if (prod.codigo_barras && prod.codigo_barras.length >= 6) {
+      return prod.codigo_barras;
+    }
+    // Si no tiene barras o es un código muy corto como "L1992", creamos un EAN13 numérico compuesto
+    const baseNum = String(prod.id || '100').padStart(6, '0');
+    return `779${baseNum}1992`;
+  };
+
+  const imprimirEtiquetasLote = () => {
+    if (!imprimiendoProd) return;
+
+    const cantInput = document.getElementById('cant-copias-etiqueta');
+    const precioInput = document.getElementById('chk-precio');
+    const modeloInput = document.getElementById('chk-modelo');
+    const empresaInput = document.getElementById('chk-empresa');
+
+    const cant = parseInt(cantInput ? cantInput.value : '1', 10) || 1;
+    const verPrecio = precioInput ? precioInput.checked : true;
+    const verModelo = modeloInput ? modeloInput.checked : true;
+    const verEmpresa = empresaInput ? empresaInput.checked : true;
+
+    const codigoFinal = obtenerCodigoCompleto(imprimiendoProd);
+
+    let htmlEtiquetas = '';
+    for (let i = 0; i < cant; i++) {
+      htmlEtiquetas += `
+        <div class="etiqueta">
+          ${verEmpresa ? `<div class="empresa">ECLIPSE STOCK</div>` : ''}
+          <div class="titulo">${imprimiendoProd.nombre}</div>
+          <div class="detalles">
+            ${verModelo && imprimiendoProd.codigo_modelo ? `<span>MOD: ${imprimiendoProd.codigo_modelo}</span>` : ''}
+            ${verPrecio && imprimiendoProd.precio ? `<span class="precio">$${imprimiendoProd.precio}</span>` : ''}
+          </div>
+          <svg class="barcode-svg"></svg>
+        </div>
+      `;
+    }
+
+    const ventana = window.open('', '_blank');
+    if (!ventana) {
+      alert('Por favor permití las ventanas emergentes para poder imprimir.');
+      return;
+    }
+
+    ventana.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Imprimir Etiquetas - ${imprimiendoProd.nombre}</title>
+          <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 15px; padding: 0; background: #fff; }
+            .grid-etiquetas { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-start; }
+            .etiqueta {
+              width: 240px;
+              border: 2px solid #000;
+              padding: 10px 8px;
+              text-align: center;
+              box-sizing: border-box;
+              page-break-inside: avoid;
+              border-radius: 8px;
+              background: #fff;
+            }
+            .empresa { font-size: 9px; font-weight: 800; letter-spacing: 1px; color: #555; text-transform: uppercase; margin-bottom: 2px; }
+            .titulo { font-size: 13px; font-weight: 700; color: #000; margin-bottom: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+            .detalles { font-size: 11px; color: #111; font-weight: 600; display: flex; justify-content: space-around; margin-bottom: 4px; border-top: 1px solid #eee; border-bottom: 1px solid #eee; padding: 2px 0; }
+            .precio { font-size: 13px; font-weight: 800; color: #000; }
+            svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+            @media print {
+              body { margin: 0; }
+              .etiqueta { border: 1.5 solid #000; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="grid-etiquetas">
+            ${htmlEtiquetas}
+          </div>
+          <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+          <script>
+            document.querySelectorAll('.etiqueta').forEach(function(elem) {
+              var svg = elem.querySelector('.barcode-svg');
+              JsBarcode(svg, "${codigoFinal}", {
+                format: "CODE128",
+                width: ${anchoBarras},
+                height: ${altoBarras},
+                fontSize: ${tamanoFuente},
+                fontOptions: "bold",
+                margin: 4
+              });
+            });
+            setTimeout(function() { window.print(); window.close(); }, 500);
+          </script>
+        </body>
+      </html>
+    `);
+    ventana.document.close();
   };
 
   return (
@@ -329,35 +434,146 @@ export default function AdminProductList() {
         </div>
       )}
 
-      {/* Modal Impresión */}
+      {/* Modal Impresor de Etiquetas Profesionales */}
       {imprimiendoProd && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-6 text-center space-y-4">
-            <h3 className="text-base font-bold text-slate-100">Vista Previa de Etiqueta</h3>
-
-            <div className="bg-white p-4 rounded-xl text-black flex flex-col items-center justify-center space-y-1">
-              <span className="font-bold text-sm tracking-tight">{imprimiendoProd.nombre}</span>
-              <span className="text-xs text-gray-600 font-mono">Mod: {imprimiendoProd.codigo_modelo || '-'}</span>
-              <BarcodeSVG
-                value={imprimiendoProd.codigo_barras || imprimiendoProd.codigo_modelo || '00000'}
-                width={1.5}
-                height={50}
-                fontSize={12}
-              />
-            </div>
-
-            <div className="flex justify-center gap-2 pt-2">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-xl rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                <Printer className="w-5 h-5 text-indigo-400" /> Generador Profesional de Etiquetas
+              </h3>
               <button
                 onClick={() => setImprimiendoProd(null)}
-                className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-sm"
+                className="text-slate-400 hover:text-slate-200"
               >
-                Cerrar
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Ajustes de Tamaño del Código de Barras */}
+            <div className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700/80 space-y-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+                <Sliders className="w-4 h-4 text-indigo-400" /> Tamaño y Densidad de Barras
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">Grosor de Barras</label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="4"
+                    step="0.5"
+                    value={anchoBarras}
+                    onChange={(e) => setAnchoBarras(parseFloat(e.target.value))}
+                    className="w-full accent-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">Altura (px)</label>
+                  <input
+                    type="range"
+                    min="30"
+                    max="100"
+                    step="5"
+                    value={altoBarras}
+                    onChange={(e) => setAltoBarras(parseInt(e.target.value, 10))}
+                    className="w-full accent-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">Tamaño Números</label>
+                  <input
+                    type="range"
+                    min="10"
+                    max="20"
+                    step="1"
+                    value={tamanoFuente}
+                    onChange={(e) => setTamanoFuente(parseInt(e.target.value, 10))}
+                    className="w-full accent-indigo-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Opciones de Contenido */}
+            <div className="grid grid-cols-2 gap-3 bg-slate-800/40 p-3 rounded-xl border border-slate-800">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Cantidad de Copias
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  defaultValue="1"
+                  id="cant-copias-etiqueta"
+                  className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Campos a Incluir
+                </label>
+                <div className="space-y-1 text-xs text-slate-300">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" id="chk-empresa" defaultChecked className="accent-indigo-500 rounded" />
+                    Marca (ECLIPSE STOCK)
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" id="chk-precio" defaultChecked className="accent-indigo-500 rounded" />
+                    Precio ($)
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" id="chk-modelo" defaultChecked className="accent-indigo-500 rounded" />
+                    Cód. Modelo
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Vista Previa en Vivo */}
+            <div className="space-y-1.5">
+              <span className="text-xs text-slate-400 font-medium">Vista previa de etiqueta comercial:</span>
+              <div className="bg-white p-4 rounded-xl text-black flex flex-col items-center justify-center space-y-1 shadow-2xl border-2 border-black max-w-xs mx-auto">
+                <span className="text-[10px] font-extrabold tracking-widest text-slate-500 uppercase">ECLIPSE STOCK</span>
+                <span className="font-bold text-sm tracking-tight text-center truncate max-w-[220px]">
+                  {imprimiendoProd.nombre}
+                </span>
+
+                <div className="flex justify-between w-full px-4 text-xs font-bold text-slate-800 font-mono pt-1">
+                  {imprimiendoProd.codigo_modelo && <span>MOD: {imprimiendoProd.codigo_modelo}</span>}
+                  {imprimiendoProd.precio > 0 && <span className="text-emerald-700">${imprimiendoProd.precio}</span>}
+                </div>
+
+                <div className="pt-1 w-full flex justify-center">
+                  <BarcodeSVG
+                    value={obtenerCodigoCompleto(imprimiendoProd)}
+                    width={anchoBarras}
+                    height={altoBarras}
+                    fontSize={tamanoFuente}
+                    margin={2}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Botones */}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setImprimiendoProd(null)}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition"
+              >
+                Cancelar
               </button>
               <button
-                onClick={() => window.print()}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold flex items-center gap-2"
+                onClick={imprimirEtiquetasLote}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-950 transition"
               >
-                <Printer className="w-4 h-4" /> Imprimir
+                <Printer className="w-4 h-4" /> Imprimir Etiquetas
               </button>
             </div>
           </div>
