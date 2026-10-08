@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import Scanner from './Scanner';
-import { Upload, Plus, Check, Camera, Barcode, Tag, DollarSign, Package, AlertCircle } from 'lucide-react';
+import { Upload, Plus, Check, Camera, Barcode, Tag, DollarSign, Package, AlertCircle, X } from 'lucide-react';
 
 export default function ImportSheets() {
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,6 @@ export default function ImportSheets() {
 
   const inputCodigoBarrasRef = useRef(null);
 
-  // Focus en el código de barras si abre el módulo
   useEffect(() => {
     if (inputCodigoBarrasRef.current) {
       inputCodigoBarrasRef.current.focus();
@@ -31,7 +30,6 @@ export default function ImportSheets() {
     setTimeout(() => setMensaje(null), 4000);
   };
 
-  // Cargar producto manualmente
   const handleAgregarManual = async (e) => {
     e.preventDefault();
     if (!formManual.nombre.trim()) {
@@ -204,7 +202,7 @@ export default function ImportSheets() {
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-4 space-y-3">
             <div className="flex justify-between items-center">
               <h4 className="text-sm font-bold text-slate-100">Escaneando Código de Barras...</h4>
-              <button onClick={() => setMostrarCamaraModal(false)} className="text-slate-400">
+              <button onClick={() => setMostrarCamaraModal(false)} className="text-slate-400 hover:text-slate-200">
                 <X className="w-5 h-5" />
               </button>
             </div>
